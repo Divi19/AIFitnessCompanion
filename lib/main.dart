@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
+// import 'services/providers.dart'; // Uncomment this once your providers file is ready!
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,20 +18,24 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+// Changed from StatelessWidget to ConsumerWidget
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // This 'ref' allows you to watch your AuthState later 
+    // to decide if the user should see the Login screen or the Home screen.
+
     return MaterialApp(
       title: 'AI Fitness Companion',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), // Changed to a "Fitness" blue
         useMaterial3: true,
       ),
       home: const Scaffold(
         body: Center(
-          child: Text('Firebase connected ✓'),
+          child: Text('Firebase & Riverpod Ready ✓'),
         ),
       ),
     );
