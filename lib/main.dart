@@ -2,40 +2,65 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
-// import 'services/providers.dart'; // Uncomment this once your providers file is ready!
+import 'features/admin/admin_ingestion.dart';
+import 'features/nutrition/nutrition_assistant.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MyApp()));
 }
 
-// Changed from StatelessWidget to ConsumerWidget
-class MyApp extends ConsumerWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // This 'ref' allows you to watch your AuthState later 
-    // to decide if the user should see the Login screen or the Home screen.
-
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AI Fitness Companion',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), // Changed to a "Fitness" blue
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const Scaffold(
-        body: Center(
-          child: Text('Firebase & Riverpod Ready ✓'),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/assistant': (context) => const NutritionAssistantScreen(),
+        '/admin': (context) => const AdminIngestionScreen(),
+      },
+    );
+  }
+}
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI Fitness Companion')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/assistant'),
+              child: const Text('Open Nutrition Assistant'),
+            ),
+            const SizedBox(height: 16),
+            // Subtle — only visible to the team, not demo users
+            TextButton(
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/admin'),
+              child: const Text(
+                'Admin: Ingest PDFs',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
         ),
       ),
     );
