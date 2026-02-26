@@ -8,8 +8,8 @@ class KnowledgeBaseService {
   static const _collection = 'knowledge_base';
 
   // ── WRITE ──────────────────────────────────────────────────────────────────
-  // Writing vectors via the REST API because FieldValue.vector() also doesn't
-  // exist in the Flutter SDK yet.
+  // Uses Firestore REST because the Flutter SDK doesn't expose vector types yet.
+  // Firebase ID token (from logged-in user) is the correct auth for Firestore REST.
   Future<void> saveChunk({
     required String text,
     required String source,
@@ -17,14 +17,11 @@ class KnowledgeBaseService {
     required List<double> embedding,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('Must be signed in.');
+    if (user == null) throw Exception('Must be signed in to save chunks.');
 
     final idToken = await user.getIdToken();
-    final projectId = await _getProjectId();
+    final projectId = _db.app.options.projectId;
 
-    // Build a Firestore REST document with a mapValue containing all fields.
-    // The vector embedding is stored as an 'arrayValue' of doubleValues —
-    // this is the correct REST representation for a vector field.
     final body = jsonEncode({
       'fields': {
         'text': {'stringValue': text},
@@ -62,29 +59,30 @@ class KnowledgeBaseService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Firestore write failed ${response.statusCode}: ${response.body}');
+      throw Exception(
+        'Firestore write error ${response.statusCode}: ${response.body}',
+      );
     }
   }
 
   // ── VECTOR SEARCH ──────────────────────────────────────────────────────────
-  // Uses the Firestore REST runQuery endpoint with a FindNearest clause —
-  // this IS supported in the REST API even though it isn't in the Flutter SDK.
+  // Firestore REST runQuery with findNearest.
+  // Supported in the REST API even though the Flutter SDK doesn't expose it yet.
   Future<List<Map<String, dynamic>>> searchSimilarChunks({
     required List<double> queryVector,
     int limit = 3,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('Must be signed in.');
+    if (user == null) throw Exception('Must be signed in to search.');
 
     final idToken = await user.getIdToken();
-    final projectId = await _getProjectId();
+    final projectId = _db.app.options.projectId;
 
     final uri = Uri.parse(
       'https://firestore.googleapis.com/v1/projects/$projectId'
       '/databases/(default)/documents:runQuery',
     );
 
-    // Firestore REST structured query with findNearest
     final body = jsonEncode({
       'structuredQuery': {
         'from': [
@@ -122,12 +120,13 @@ class KnowledgeBaseService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Vector search failed ${response.statusCode}: ${response.body}');
+      throw Exception(
+        'Vector search error ${response.statusCode}: ${response.body}',
+      );
     }
 
     final List<dynamic> results = jsonDecode(response.body);
 
-    // Parse the REST response format back into simple maps
     return results
         .where((r) => r['document'] != null)
         .map((r) {
@@ -139,11 +138,5 @@ class KnowledgeBaseService {
           };
         })
         .toList();
-  }
-
-  // ── HELPER ─────────────────────────────────────────────────────────────────
-  // Gets the Firebase project ID from the Firestore instance app config.
-  Future<String> _getProjectId() async {
-    return _db.app.options.projectId;
   }
 }
