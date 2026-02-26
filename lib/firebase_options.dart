@@ -65,4 +65,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'ai-fitness-app-4c83b.firebasestorage.app',
     iosBundleId: 'com.example.aiFitnessApp',
   );
+
 }
