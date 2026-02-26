@@ -76,29 +76,27 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
     await _processPdf(fileBytes: file.bytes!, fileName: file.name);
   }
 
-  // ── STEP 1.5: CLEAN AND CHUNK TEXT (THE RAG OPTIMIZATION) ─────────────────
+  // ── STEP 1.5: CHARACTER-BASED CHUNKING (FIXES "NO SPACES" BUG) ────────────
   List<String> _cleanAndChunkText(String fullText) {
     // 1. Clean the noise (TOC dots, URLs, Page headers, extra spaces)
     String cleaned = fullText
-        .replaceAll(RegExp(r'\.{5,}'), ' ') // Strips TOC like "........"
-        .replaceAll(RegExp(r'Page [ivx0-9]+ \|.*'), ' ') // Strips footers
-        .replaceAll(RegExp(r'https?://[^\s]+'), ' ') // Strips URLs
-        .replaceAll(RegExp(r'\s+'), ' ') // Flattens all linebreaks to single spaces
+        .replaceAll(RegExp(r'\.{5,}'), ' ') 
+        .replaceAll(RegExp(r'Page [ivx0-9]+ \|.*'), ' ') 
+        .replaceAll(RegExp(r'https?://[^\s]+'), ' ') 
+        .replaceAll(RegExp(r'\s+'), ' ') 
         .trim();
 
-    // 2. Tokenize into words
-    List<String> words = cleaned.split(' ');
-
-    // 3. Create overlapping chunks
     List<String> chunks = [];
-    const int chunkSize = 300; // Optimal Gemini context size
-    const int overlap = 50;    // Prevents cutting sentences in half
+    
+    // 2. Chunk by CHARACTERS instead of WORDS to bypass font-encoding glitches
+    const int chunkSize = 1500; // Roughly equivalent to 300 words
+    const int overlap = 250;    // Roughly equivalent to 50 words overlap
 
-    for (int i = 0; i < words.length; i += (chunkSize - overlap)) {
-      int end = (i + chunkSize < words.length) ? i + chunkSize : words.length;
-      String chunk = words.sublist(i, end).join(' ');
+    for (int i = 0; i < cleaned.length; i += (chunkSize - overlap)) {
+      int end = (i + chunkSize < cleaned.length) ? i + chunkSize : cleaned.length;
+      String chunk = cleaned.substring(i, end);
 
-      // Filter out garbage/legal-heavy chunks
+      // Filter out garbage/legal-heavy chunks based on letter ratio
       final letters = chunk.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
       final ratio = letters / chunk.length;
       
@@ -106,7 +104,8 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
         chunks.add(chunk);
       }
 
-      if (end == words.length) break;
+      // Stop if we've reached the end of the document
+      if (end == cleaned.length) break;
     }
 
     return chunks;
@@ -135,7 +134,6 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
 
       setState(() => _statusMessage = 'Text extracted. Cleaning & chunking...');
 
-      // Use the new semantic chunker instead of raw splits
       final readyChunks = _cleanAndChunkText(fullText);
 
       if (readyChunks.isEmpty) {
