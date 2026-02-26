@@ -24,12 +24,9 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
 
   // ── STEP 1: REQUEST PERMISSION THEN OPEN FILE PICKER ──────────────────────
   Future<void> _pickAndIngestPdf() async {
-    // Request storage permission — required to access Downloads on Android
     final storageStatus = await Permission.storage.request();
     final mediaStatus = await Permission.manageExternalStorage.request();
 
-    // On Android 13+ storage permission is auto-granted, so we proceed even
-    // if it says denied (the newer READ_MEDIA_* permissions take over)
     if (storageStatus.isPermanentlyDenied && mediaStatus.isPermanentlyDenied) {
       setState(() {
         _statusMessage =
@@ -45,7 +42,7 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
       result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true,         // load bytes directly into memory
+        withData: true,
         allowMultiple: false,
         allowCompression: false,
       );
@@ -79,13 +76,48 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
     await _processPdf(fileBytes: file.bytes!, fileName: file.name);
   }
 
+  // ── STEP 1.5: CLEAN AND CHUNK TEXT (THE RAG OPTIMIZATION) ─────────────────
+  List<String> _cleanAndChunkText(String fullText) {
+    // 1. Clean the noise (TOC dots, URLs, Page headers, extra spaces)
+    String cleaned = fullText
+        .replaceAll(RegExp(r'\.{5,}'), ' ') // Strips TOC like "........"
+        .replaceAll(RegExp(r'Page [ivx0-9]+ \|.*'), ' ') // Strips footers
+        .replaceAll(RegExp(r'https?://[^\s]+'), ' ') // Strips URLs
+        .replaceAll(RegExp(r'\s+'), ' ') // Flattens all linebreaks to single spaces
+        .trim();
+
+    // 2. Tokenize into words
+    List<String> words = cleaned.split(' ');
+
+    // 3. Create overlapping chunks
+    List<String> chunks = [];
+    const int chunkSize = 300; // Optimal Gemini context size
+    const int overlap = 50;    // Prevents cutting sentences in half
+
+    for (int i = 0; i < words.length; i += (chunkSize - overlap)) {
+      int end = (i + chunkSize < words.length) ? i + chunkSize : words.length;
+      String chunk = words.sublist(i, end).join(' ');
+
+      // Filter out garbage/legal-heavy chunks
+      final letters = chunk.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
+      final ratio = letters / chunk.length;
+      
+      if (chunk.length > 150 && ratio > 0.6) {
+        chunks.add(chunk);
+      }
+
+      if (end == words.length) break;
+    }
+
+    return chunks;
+  }
+
   // ── STEP 2: EXTRACT → CHUNK → EMBED → STORE ───────────────────────────────
   Future<void> _processPdf({
     required List<int> fileBytes,
     required String fileName,
   }) async {
     try {
-      // EXTRACT — pull all text out of the PDF
       final document = PdfDocument(inputBytes: fileBytes);
       final extractor = PdfTextExtractor(document);
       final fullText = extractor.extractText();
@@ -101,40 +133,29 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
         return;
       }
 
-      setState(() => _statusMessage = 'Text extracted. Splitting into chunks...');
+      setState(() => _statusMessage = 'Text extracted. Cleaning & chunking...');
 
-      // CHUNK — split on double newlines, drop anything too short to be useful
-      final rawChunks = fullText
-          .split(RegExp(r'\n{2,}'))
-          .map((s) => s.trim())
-          .where((s) {
-            // Filter out chunks that look like garbled OCR output —
-            // real English text has a much higher ratio of letters to symbols
-            final letters = s.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
-            final ratio = letters / s.length;
-            return s.length > 150 && ratio > 0.4; // at least 40% must be real letters
-          })          
-          .toList();
+      // Use the new semantic chunker instead of raw splits
+      final readyChunks = _cleanAndChunkText(fullText);
 
-      if (rawChunks.isEmpty) {
+      if (readyChunks.isEmpty) {
         setState(() {
           _isProcessing = false;
           _statusMessage =
-              'No usable chunks found in "$fileName".\n'
-              'The PDF may not have paragraph breaks. Try a different file.';
+              'No usable chunks found in "$fileName" after cleaning.\n'
+              'The PDF might be purely legal disclaimers or formatting noise.';
         });
         return;
       }
 
       setState(() {
-        _totalChunks = rawChunks.length;
+        _totalChunks = readyChunks.length;
         _processedChunks = 0;
-        _statusMessage = 'Found $_totalChunks chunks. Starting embedding...';
+        _statusMessage = 'Found $_totalChunks optimized chunks. Starting embedding...';
       });
 
-      // EMBED & STORE — one chunk at a time to stay within Gemini rate limits
-      for (int i = 0; i < rawChunks.length; i++) {
-        final chunk = rawChunks[i];
+      for (int i = 0; i < readyChunks.length; i++) {
+        final chunk = readyChunks[i];
 
         setState(() {
           _processedChunks = i + 1;
@@ -151,7 +172,6 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
           embedding: embedding,
         );
 
-        // Polite delay — avoids Gemini free tier rate limit (1500 req/min)
         await Future.delayed(const Duration(milliseconds: 300));
       }
 
@@ -162,7 +182,7 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
         _totalChunks = 0;
         _processedChunks = 0;
         _statusMessage =
-            'Done! Chunks from "$fileName" saved.\n'
+            'Done! Optimized chunks from "$fileName" saved.\n'
             'You can now select another PDF.';
       });
     } catch (e) {
@@ -176,23 +196,10 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
   // ── CATEGORY INFERENCE ─────────────────────────────────────────────────────
   String _inferCategory(String text) {
     final lower = text.toLowerCase();
-    if (lower.contains('protein') ||
-        lower.contains('calorie') ||
-        lower.contains('macro') ||
-        lower.contains('nutrition') ||
-        lower.contains('dietary')) return 'nutrition';
-    if (lower.contains('recovery') ||
-        lower.contains('rest') ||
-        lower.contains('sleep') ||
-        lower.contains('fatigue')) return 'recovery';
-    if (lower.contains('hypertrophy') ||
-        lower.contains('muscle') ||
-        lower.contains('strength') ||
-        lower.contains('resistance')) return 'hypertrophy';
-    if (lower.contains('injury') ||
-        lower.contains('rehabilitation') ||
-        lower.contains('pain') ||
-        lower.contains('therapy')) return 'rehabilitation';
+    if (lower.contains('protein') || lower.contains('calorie') || lower.contains('macro') || lower.contains('nutrition') || lower.contains('dietary')) return 'nutrition';
+    if (lower.contains('recovery') || lower.contains('rest') || lower.contains('sleep') || lower.contains('fatigue')) return 'recovery';
+    if (lower.contains('hypertrophy') || lower.contains('muscle') || lower.contains('strength') || lower.contains('resistance')) return 'hypertrophy';
+    if (lower.contains('injury') || lower.contains('rehabilitation') || lower.contains('pain') || lower.contains('therapy')) return 'rehabilitation';
     return 'general';
   }
 
@@ -210,28 +217,20 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
-            // ── Progress bar ──────────────────────────────────────────────
             if (_isProcessing) ...[
               LinearProgressIndicator(
-                value: _totalChunks > 0
-                    ? _processedChunks / _totalChunks
-                    : null,
+                value: _totalChunks > 0 ? _processedChunks / _totalChunks : null,
                 backgroundColor: Colors.grey[200],
                 color: Colors.deepPurple,
               ),
               const SizedBox(height: 8),
               Text(
-                _totalChunks > 0
-                    ? '$_processedChunks / $_totalChunks chunks'
-                    : 'Processing...',
+                _totalChunks > 0 ? '$_processedChunks / $_totalChunks chunks' : 'Processing...',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 12),
             ],
-
-            // ── Status message ────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -244,16 +243,11 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
                 style: const TextStyle(fontSize: 14),
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // ── Select PDF button ─────────────────────────────────────────
             ElevatedButton.icon(
               onPressed: _isProcessing ? null : _pickAndIngestPdf,
               icon: const Icon(Icons.upload_file),
-              label: Text(
-                _isProcessing ? 'Processing...' : 'Select PDF & Ingest',
-              ),
+              label: Text(_isProcessing ? 'Processing...' : 'Select PDF & Ingest'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
                 foregroundColor: Colors.white,
@@ -261,10 +255,7 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
                 disabledBackgroundColor: Colors.grey[300],
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // ── ADB tip box ───────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -273,45 +264,27 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
                 border: Border.all(color: Colors.blue[200]!),
               ),
               child: const Text(
-                '💡 If PDFs don\'t appear in the picker:\n'
-                'Run on your laptop terminal:\n'
-                'adb push yourfile.pdf /sdcard/Download/\n\n'
-                'Then tap ☰ menu in the picker → select Downloads',
+                '💡 If PDFs don\'t appear in the picker:\nRun on your laptop terminal:\nadb push yourfile.pdf /sdcard/Download/\n\nThen tap ☰ menu in the picker → select Downloads',
                 style: TextStyle(fontSize: 12, color: Colors.blue),
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // ── Completed files log ───────────────────────────────────────
             if (_completedFiles.isNotEmpty) ...[
-              const Text(
-                'Completed this session:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
+              const Text('Completed this session:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               Expanded(
                 child: ListView.builder(
                   itemCount: _completedFiles.length,
                   itemBuilder: (context, index) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Text(
-                      _completedFiles[index],
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(_completedFiles[index], style: const TextStyle(fontSize: 13)),
                   ),
                 ),
               ),
             ] else
               const Expanded(child: SizedBox()),
-
-            // ── Footer ────────────────────────────────────────────────────
             const Text(
-              'Run once per PDF. Do not close the app while processing.\n'
-              'Verify in Firebase Console → Firestore → knowledge_base.',
+              'Run once per PDF. Do not close the app while processing.\nVerify in Firebase Console → Firestore → knowledge_base.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 11),
             ),
