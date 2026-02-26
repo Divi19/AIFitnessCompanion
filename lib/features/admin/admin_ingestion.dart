@@ -107,7 +107,13 @@ class _AdminIngestionScreenState extends State<AdminIngestionScreen> {
       final rawChunks = fullText
           .split(RegExp(r'\n{2,}'))
           .map((s) => s.trim())
-          .where((s) => s.length > 150) // 150 chars filters noise better than 100
+          .where((s) {
+            // Filter out chunks that look like garbled OCR output —
+            // real English text has a much higher ratio of letters to symbols
+            final letters = s.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
+            final ratio = letters / s.length;
+            return s.length > 150 && ratio > 0.4; // at least 40% must be real letters
+          })          
           .toList();
 
       if (rawChunks.isEmpty) {
