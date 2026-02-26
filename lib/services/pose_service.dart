@@ -183,8 +183,8 @@ class PoseService {
   // 
 
   /// Assesses push-up form using two angles:
-  ///   Elbow angle (shoulder -> elbow -> wrist) — detects rep depth                                       
-  ///   Body angle  (shoulder -> hip ankle) — detects plank alignment
+  ///   Elbow angle (shoulder -> elbow -> wrist) -> detects rep depth                                       
+  ///   Body angle  (shoulder -> hip ankle) -> detects plank alignment
   ///
   /// Also drives the push-up rep counter on every call.
   FormFeedback assessPushup(Pose pose) {
@@ -226,7 +226,7 @@ class PoseService {
   }
 
   // 
-  // FORM ASSESSMENT — BICEP CURL
+  // FORM ASSESSMENT -> BICEP CURL
   // 
 
   /// Assesses bicep curl form using one angle:
@@ -252,7 +252,7 @@ class PoseService {
 
     // Coaching cues
     if (elbowAngle > 150) {
-      return FormFeedback(true, "Down position — curl up!");
+      return FormFeedback(true, "Down position - curl up!");
     }
     if (elbowAngle < 40) {
       return FormFeedback(false, "Don't over-curl, keep control");
