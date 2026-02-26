@@ -11,16 +11,16 @@ class RagService {
     required String userQuestion,
     required String userId,
   }) async {
-    // STEP 1: Embed the user's question with RETRIEVAL_QUERY taskType
+    // STEP 1: Embed the user's question
     final queryVector = await _geminiService.getQueryEmbedding(userQuestion);
 
-    // STEP 2: Find the most semantically relevant chunks in Firestore
+    // STEP 2: Retrieve relevant chunks from Firestore
     final relevantChunks = await _knowledgeBaseService.searchSimilarChunks(
       queryVector: queryVector,
       limit: 3,
     );
 
-    // STEP 3: Fetch the user's profile for personalisation
+    // STEP 3: Fetch full user profile
     final userDoc = await _db.collection('users').doc(userId).get();
     final userData = userDoc.data();
 
@@ -28,7 +28,9 @@ class RagService {
     final limitations = List<String>.from(
       userData?['physical_limitations'] ?? [],
     );
-    final fatigueScore = userData?['fatigue_score'] ?? 5;
+    final fatigueScore = (userData?['fatigue_score'] ?? 5) as int;
+    final fitnessGoal = userData?['fitness_goal'] ?? 'general fitness';
+    final currentStreak = (userData?['current_streak'] ?? 0) as int;
 
     // STEP 4: Build the augmented prompt
     final prompt = _buildPrompt(
@@ -36,10 +38,12 @@ class RagService {
       userName: userName,
       limitations: limitations,
       fatigueScore: fatigueScore,
+      fitnessGoal: fitnessGoal,
+      currentStreak: currentStreak,
       retrievedChunks: relevantChunks,
     );
 
-    // STEP 5: Generate and return the response
+    // STEP 5: Generate response
     return _geminiService.generateResponse(prompt);
   }
 
@@ -48,42 +52,74 @@ class RagService {
     required String userName,
     required List<String> limitations,
     required int fatigueScore,
+    required String fitnessGoal,
+    required int currentStreak,
     required List<Map<String, dynamic>> retrievedChunks,
   }) {
+    // Number each chunk and include its source filename
     final contextBlock = retrievedChunks
         .asMap()
         .entries
         .map((e) =>
-            '[Reference ${e.key + 1}] (Source: ${e.value['source']})\n'
+            '[Reference ${e.key + 1}] Source: ${e.value['source']}\n'
             '${e.value['text']}')
-        .join('\n\n');
+        .join('\n\n---\n\n');
 
     final limitationsText =
-        limitations.isEmpty ? 'None reported.' : limitations.join(', ');
+        limitations.isEmpty ? 'None reported' : limitations.join(', ');
+
+    // Build fatigue context string
+    String fatigueContext;
+    if (fatigueScore >= 8) {
+      fatigueContext =
+          '$fatigueScore/10 — HIGH. Recommend active recovery only today.';
+    } else if (fatigueScore >= 5) {
+      fatigueContext =
+          '$fatigueScore/10 — MODERATE. Recommend moderate intensity.';
+    } else {
+      fatigueContext = '$fatigueScore/10 — LOW. Full intensity appropriate.';
+    }
 
     return '''
-You are a safe and evidence-based fitness and nutrition assistant.
+You are an evidence-based fitness and nutrition assistant for the AI Fitness Companion app.
 
-STRICT RULES YOU MUST FOLLOW:
-1. Base your answer ONLY on the provided Reference Context below. Do not use outside knowledge.
-2. If the answer cannot be found in the references, say: "I could not find specific guidance on this in the current knowledge base."
-3. Actively consider the user's physical limitations and fatigue score in every response.
-4. If any recommendation conflicts with the user's limitations, flag it with a warning and suggest a safe alternative.
-5. Never give advice that could harm someone with the listed limitations.
-6. Keep your response concise, friendly, and actionable.
-
---- USER PROFILE ---
+════════════════════════════════════
+USER PROFILE
+════════════════════════════════════
 Name: $userName
+Fitness Goal: $fitnessGoal
 Physical Limitations / Injuries: $limitationsText
-Current Fatigue Score: $fatigueScore / 10
+Current Fatigue Score: $fatigueContext
+Workout Streak: $currentStreak days
 
---- REFERENCE CONTEXT (from verified fitness literature) ---
+════════════════════════════════════
+REFERENCE DOCUMENTS (retrieved from knowledge base)
+════════════════════════════════════
 $contextBlock
 
---- USER'S QUESTION ---
+════════════════════════════════════
+STRICT RULES
+════════════════════════════════════
+1. Base your answer ONLY on the Reference Documents above.
+2. You MUST cite which Reference number supports each claim, like this:
+   "Progressive overload is key for hypertrophy [Ref 1]."
+3. If a reference recommends something that conflicts with the user's
+   limitations, you MUST flag it with ⚠️ and suggest a safe alternative.
+4. You MUST end every response with two clearly labelled sections:
+   📚 SOURCES USED: list the source filename of each reference you used
+   👤 PERSONALISATION APPLIED: list what user profile data influenced this answer
+5. If the answer is not in the references, say exactly:
+   "This topic is not covered in the current knowledge base."
+6. Never invent information. Never use outside knowledge.
+
+════════════════════════════════════
+USER'S QUESTION
+════════════════════════════════════
 $userQuestion
 
---- YOUR RESPONSE ---
+════════════════════════════════════
+YOUR RESPONSE
+════════════════════════════════════
 ''';
   }
 }
