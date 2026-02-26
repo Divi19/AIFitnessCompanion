@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
+import 'core/constants.dart';
 import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Immediately crash with a clear message in debug mode if env file was
+  // not passed via --dart-define-from-file=.env
+  // This only fires in debug builds — has no effect in release.
+  AppConstants.assertKeysLoaded();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -46,15 +54,12 @@ class HomeScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             ElevatedButton(
-              onPressed: () =>
-                  Navigator.pushNamed(context, '/assistant'),
+              onPressed: () => Navigator.pushNamed(context, '/assistant'),
               child: const Text('Open Nutrition Assistant'),
             ),
             const SizedBox(height: 16),
-            // Subtle — only visible to the team, not demo users
             TextButton(
-              onPressed: () =>
-                  Navigator.pushNamed(context, '/admin'),
+              onPressed: () => Navigator.pushNamed(context, '/admin'),
               child: const Text(
                 'Admin: Ingest PDFs',
                 style: TextStyle(color: Colors.grey),
