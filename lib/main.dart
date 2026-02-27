@@ -7,6 +7,7 @@ import 'core/constants.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
+import 'screens/workout_tracker_screen.dart'; // Import the new screen for pose detection and correction
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -158,6 +159,31 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
+  runApp(
+    
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends ConsumerWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MaterialApp(
+      title: 'AI Fitness Companion',
+      debugShowCheckedModeBanner: false, // Hides the red debug banner for demo
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+
+      // Directly boot into the workout tracker for now.
+      // When your teammates finish the auth/home screen, replace this with
+      // their screen and add a navigation button to WorkoutTrackerScreen from there.
+      home: const WorkoutTrackerScreen(),
     );
   }
 }
