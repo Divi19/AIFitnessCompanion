@@ -104,7 +104,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               // Greeting
               Text(
-                'Welcome back 👋',
+                'Welcome back',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
