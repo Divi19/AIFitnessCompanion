@@ -7,7 +7,7 @@ import 'core/constants.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
-import 'screens/workout_tracker_screen.dart'; // Import the new screen for pose detection and correction
+import 'screens/workout_tracker_screen.dart'; // Pose detection screen
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +19,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // ProviderScope wraps the entire app, fulfilling the requirement for both
+  // the chat backend and the new WorkoutTrackerScreen.
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -34,15 +36,13 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      // AuthGate sits at the root — no named routes needed for auth flow
+      // AuthGate sits at the root — ensuring users log in first
       home: const AuthGate(),
     );
   }
 }
 
 // ── AUTH GATE ───────────────────────────────────────────────────────────────
-// Listens to Firebase auth state. Automatically shows AuthScreen when signed
-// out and HomeScreen when signed in — no manual navigation needed.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -51,19 +51,16 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Still waiting for Firebase to confirm auth state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // Not signed in — show auth screen
         if (!snapshot.hasData || snapshot.data == null) {
           return const AuthScreen();
         }
 
-        // Signed in — show main app
         return const HomeScreen();
       },
     );
@@ -76,7 +73,6 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _signOut(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
-    // AuthGate StreamBuilder automatically navigates back to AuthScreen
   }
 
   @override
@@ -103,7 +99,6 @@ class HomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Greeting
               Text(
                 'Welcome back',
                 textAlign: TextAlign.center,
@@ -120,7 +115,7 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 40),
 
-              // Main CTA
+              // FEATURE 1: RAG Assistant
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -142,7 +137,29 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Admin — subtle, not prominent for demo users
+              // FEATURE 2: Pose Detection Workout Tracker
+              ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const WorkoutTrackerScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.fitness_center),
+                label: const Text('Start AI Workout Tracker'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange, // Different color to stand out
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Admin Route
               TextButton(
                 onPressed: () => Navigator.push(
                   context,
@@ -159,31 +176,6 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
-  runApp(
-    
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
-}
-
-class MyApp extends ConsumerWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'AI Fitness Companion',
-      debugShowCheckedModeBanner: false, // Hides the red debug banner for demo
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-
-      // Directly boot into the workout tracker for now.
-      // When your teammates finish the auth/home screen, replace this with
-      // their screen and add a navigation button to WorkoutTrackerScreen from there.
-      home: const WorkoutTrackerScreen(),
     );
   }
 }
