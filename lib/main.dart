@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
-// import 'services/providers.dart'; // Uncomment this once your providers file is ready!
+import 'injury_profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,11 +33,7 @@ class MyApp extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), // Changed to a "Fitness" blue
         useMaterial3: true,
       ),
-      home: const Scaffold(
-        body: Center(
-          child: Text('Firebase & Riverpod Ready ✓'),
-        ),
-      ),
+      home: const InjuryProfileScreen(),
     );
   }
 }
