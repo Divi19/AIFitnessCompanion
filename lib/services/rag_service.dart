@@ -25,12 +25,16 @@ class RagService {
     final userData = userDoc.data();
 
     final userName = userData?['name'] ?? 'the user';
-    final limitations = List<String>.from(
-      userData?['physical_limitations'] ?? [],
-    );
-    final fatigueScore = (userData?['fatigue_score'] ?? 5) as int;
+    
+    // Safer list parsing to prevent silent crashes
+    final rawLimitations = userData?['physical_limitations'];
+    final limitations = rawLimitations is List 
+        ? List<String>.from(rawLimitations) 
+        : <String>[];
+
+    final fatigueScore = (userData?['fatigue_score'] as num?)?.toInt() ?? 5;
     final fitnessGoal = userData?['fitness_goal'] ?? 'general fitness';
-    final currentStreak = (userData?['current_streak'] ?? 0) as int;
+    final currentStreak = (userData?['current_streak'] as num?)?.toInt() ?? 0;
 
     // STEP 4: Build the augmented prompt
     final prompt = _buildPrompt(
@@ -56,32 +60,26 @@ class RagService {
     required int currentStreak,
     required List<Map<String, dynamic>> retrievedChunks,
   }) {
-    // Number each chunk and include its source filename
+    // Just map the raw text. No reference numbers or filenames.
     final contextBlock = retrievedChunks
-        .asMap()
-        .entries
-        .map((e) =>
-            '[Reference ${e.key + 1}] Source: ${e.value['source']}\n'
-            '${e.value['text']}')
+        .map((e) => e['text'])
         .join('\n\n---\n\n');
 
     final limitationsText =
         limitations.isEmpty ? 'None reported' : limitations.join(', ');
 
-    // Build fatigue context string
     String fatigueContext;
     if (fatigueScore >= 8) {
-      fatigueContext =
-          '$fatigueScore/10 — HIGH. Recommend active recovery only today.';
+      fatigueContext = '$fatigueScore/10 — HIGH. Recommend active recovery only today.';
     } else if (fatigueScore >= 5) {
-      fatigueContext =
-          '$fatigueScore/10 — MODERATE. Recommend moderate intensity.';
+      fatigueContext = '$fatigueScore/10 — MODERATE. Recommend moderate intensity.';
     } else {
       fatigueContext = '$fatigueScore/10 — LOW. Full intensity appropriate.';
     }
 
     return '''
 You are an evidence-based fitness and nutrition assistant for the AI Fitness Companion app.
+Speak naturally and conversationally. Do not list references, sources, or personalization steps in your output.
 
 ════════════════════════════════════
 USER PROFILE
@@ -100,17 +98,10 @@ $contextBlock
 ════════════════════════════════════
 STRICT RULES
 ════════════════════════════════════
-1. Base your answer ONLY on the Reference Documents above.
-2. You MUST cite which Reference number supports each claim, like this:
-   "Progressive overload is key for hypertrophy [Ref 1]."
-3. If a reference recommends something that conflicts with the user's
-   limitations, you MUST flag it with and suggest a safe alternative.
-4. You MUST end every response with two clearly labelled sections:
-   SOURCES USED: list the source filename of each reference you used
-   PERSONALISATION APPLIED: list what user profile data influenced this answer
-5. If the answer is not in the references, say exactly:
-   "This topic is not covered in the current knowledge base."
-6. Never invent information. Never use outside knowledge.
+1. Base your fitness advice ONLY on the Reference Documents above.
+2. Seamlessly adapt your advice to the user's profile, especially their physical limitations. If a reference recommends something that conflicts with their injury, flag it conversationally and suggest a safe alternative.
+3. If the answer is not in the references, say exactly: "This topic is not covered in the current knowledge base."
+4. Never invent information. Never use outside knowledge.
 
 ════════════════════════════════════
 USER'S QUESTION
