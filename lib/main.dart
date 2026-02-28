@@ -10,7 +10,6 @@ import 'features/nutrition/nutrition_assistant.dart';
 import 'features/workout/injury_profile_screen.dart';
 import 'features/workout/workout_builder_screen.dart';
 import 'features/profile/profile_screen.dart';
-import 'features/admin/admin_ingestion.dart';
 import 'screens/workout_tracker_screen.dart';
 import 'screens/meal_tracker_screen.dart';
 
@@ -396,6 +395,25 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   ],
                 ),
 
+                const SizedBox(height: 16),
+                
+                // NEW SCAN MEAL BUTTON ADDED HERE
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MealTrackerScreen()),
+                  ),
+                  icon: const Icon(Icons.camera_alt, size: 20),
+                  label: const Text('Scan a Meal', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A1A), // Dark surface
+                    foregroundColor: const Color(0xFFFF5E00), // Electric Orange
+                    side: BorderSide(color: const Color(0xFFFF5E00).withOpacity(0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+
                 const SizedBox(height: 40),
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 24),
@@ -482,21 +500,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         ),
                       ),
                     ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Admin button — hidden at bottom, not prominent
-                TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const AdminIngestionScreen()),
-                  ),
-                  child: const Text(
-                    'Admin: Ingest PDFs',
-                    style: TextStyle(color: Colors.white24, fontSize: 12),
                   ),
                 ),
 
