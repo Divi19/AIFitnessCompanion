@@ -32,8 +32,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'AI Fitness Companion',
       debugShowCheckedModeBanner: false,
+      // Switched to a sleek dark theme with your custom colors
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0D0D0D), // Deep Black
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFB9FF2B), // Volt Lime Green
+          secondary: Color(0xFFFF5E00), // Electric Orange
+          surface: Color(0xFF1A1A1A), // Slightly lighter grey for cards
+        ),
         useMaterial3: true,
       ),
       // AuthGate sits at the root — ensuring users log in first
@@ -53,7 +60,11 @@ class AuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFB9FF2B), // Green loader
+              ),
+            ),
           );
         }
 
@@ -81,8 +92,12 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Fitness Companion'),
-        backgroundColor: Colors.deepPurple,
+        title: const Text(
+          'AI Fitness Companion',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent, // Modern transparent app bar
+        elevation: 0,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -102,20 +117,21 @@ class HomeScreen extends StatelessWidget {
               Text(
                 'Welcome back',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 14, color: Colors.grey[400]),
               ),
               Text(
                 user?.email ?? '',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
 
               const SizedBox(height: 40),
 
-              // FEATURE 1: RAG Assistant
+              // FEATURE 1: RAG Assistant (Green)
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -124,20 +140,23 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Open Fitness Assistant'),
+                label: const Text(
+                  'Open Fitness Assistant',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: const Color(0xFFB9FF2B), // Volt Lime Green
+                  foregroundColor: Colors.black, // High contrast text
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ),
 
               const SizedBox(height: 16),
 
-              // FEATURE 2: Pose Detection Workout Tracker
+              // FEATURE 2: Pose Detection Workout Tracker (Orange)
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -146,20 +165,23 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.fitness_center),
-                label: const Text('Start AI Workout Tracker'),
+                label: const Text(
+                  'Start AI Workout Tracker',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepOrange, // Different color to stand out
+                  backgroundColor: const Color(0xFFFF5E00), // Electric Orange
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
-              // Admin Route
+              // Admin Route (Subtle)
               TextButton(
                 onPressed: () => Navigator.push(
                   context,

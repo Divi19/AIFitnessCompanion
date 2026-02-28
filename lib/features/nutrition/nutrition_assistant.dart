@@ -10,8 +10,7 @@ class NutritionAssistantScreen extends StatefulWidget {
       _NutritionAssistantScreenState();
 }
 
-class _NutritionAssistantScreenState
-    extends State<NutritionAssistantScreen> {
+class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   final _ragService = RagService();
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
@@ -79,10 +78,15 @@ class _NutritionAssistantScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D), // Deep Black Background
       appBar: AppBar(
-        title: const Text('Fitness & Nutrition Assistant'),
-        backgroundColor: Colors.deepPurple,
+        title: const Text(
+          'Fitness & Nutrition Assistant',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF0D0D0D),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -92,7 +96,7 @@ class _NutritionAssistantScreenState
                     child: Text(
                       'Ask me anything about fitness,\nnutrition, or recovery.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
                   )
                 : ListView.builder(
@@ -112,11 +116,12 @@ class _NutritionAssistantScreenState
                   ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+              color: Color(0xFF1A1A1A), // Dark surface for input area
+              border: Border(
+                top: BorderSide(color: Colors.white10, width: 1),
+              ),
             ),
             child: Row(
               children: [
@@ -124,17 +129,27 @@ class _NutritionAssistantScreenState
                   child: TextField(
                     controller: _controller,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. How much protein do I need per day?',
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. How much protein do I need?',
+                      hintStyle: TextStyle(color: Colors.grey),
                       border: InputBorder.none,
                     ),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-                IconButton(
-                  icon:
-                      const Icon(Icons.send, color: Colors.deepPurple),
-                  onPressed: _isLoading ? null : _sendMessage,
+                Container(
+                  decoration: BoxDecoration(
+                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B), // Volt Green Button
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.send,
+                      color: _isLoading ? Colors.grey : Colors.black, // Black icon for high contrast
+                    ),
+                    onPressed: _isLoading ? null : _sendMessage,
+                  ),
                 ),
               ],
             ),
@@ -154,24 +169,31 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment:
-          isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser ? Colors.deepPurple : Colors.grey[200],
-          borderRadius: BorderRadius.circular(16),
+          // Volt Green for User, Dark Surface for AI
+          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isUser ? 16 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 16),
+          ),
+          border: isUser ? null : Border.all(color: Colors.white10),
         ),
         child: Text(
           text,
           style: TextStyle(
-            color: isUser ? Colors.white : Colors.black87,
-            fontSize: 14,
+            // Black text on Green bubble, White text on Dark bubble
+            color: isUser ? Colors.black : Colors.white,
+            fontSize: 15,
+            fontWeight: isUser ? FontWeight.w500 : FontWeight.normal,
           ),
         ),
       ),
@@ -188,10 +210,16 @@ class _TypingIndicator extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFF1A1A1A), // Dark surface
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(16),
+          ),
+          border: Border.all(color: Colors.white10),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -199,10 +227,16 @@ class _TypingIndicator extends StatelessWidget {
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFFB9FF2B), // Volt Green loader
+              ),
             ),
-            SizedBox(width: 8),
-            Text('Searching knowledge base...'),
+            SizedBox(width: 12),
+            Text(
+              'Searching knowledge base...',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
           ],
         ),
       ),

@@ -190,9 +190,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF0D0D0D),
         title: const Text(
           'Workout Tracker',
           style: TextStyle(color: Colors.white),
@@ -221,8 +221,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
                     decoration: BoxDecoration(
                       // Highlight the active exercise in green
                       color: isSelected
-                          ? Colors.greenAccent
-                          : Colors.grey[800],
+                          ? const Color(0xFFB9FF2B)
+                          : const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -267,14 +267,14 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
                 : const Center(
                     // Shown while the camera controller is initialising
                     child: CircularProgressIndicator(
-                        color: Colors.greenAccent),
+                        color: Color(0xFFB9FF2B)),
                   ),
           ),
 
           // Rep counter + form feedback panel 
           // Docked at the bottom of the screen so it's always visible
           Container(
-            color: Colors.grey[900],
+            color: const Color(0xFF1A1A1A),
             padding:
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Row(
@@ -291,7 +291,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
                     Text(
                       '$_repCount',
                       style: const TextStyle(
-                        color: Colors.greenAccent,
+                        color: Color(0xFFB9FF2B),
                         fontSize: 48,
                         fontWeight: FontWeight.bold,
                       ),
@@ -301,7 +301,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
                       child: const Text(
                         'Reset',
                         style: TextStyle(
-                            color: Colors.redAccent, fontSize: 12),
+                            color: Color(0xFFFF5E00), fontSize: 12),
                       ),
                     ),
                   ],
@@ -315,19 +315,19 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      // Green tint = good form, red tint = needs correction
+                      // Green tint = good form, orange tint = needs correction
                       color: _lastFeedback == null
-                          ? Colors.grey[800]
+                          ? Colors.transparent
                           : _lastFeedback!.isGoodForm
-                              ? Colors.green.withOpacity(0.2)
-                              : Colors.red.withOpacity(0.2),
+                              ? const Color(0xFFB9FF2B).withOpacity(0.1)
+                              : const Color(0xFFFF5E00).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _lastFeedback == null
-                            ? Colors.grey
+                            ? Colors.white10
                             : _lastFeedback!.isGoodForm
-                                ? Colors.greenAccent
-                                : Colors.redAccent,
+                                ? const Color(0xFFB9FF2B)
+                                : const Color(0xFFFF5E00),
                       ),
                     ),
                     child: Text(
