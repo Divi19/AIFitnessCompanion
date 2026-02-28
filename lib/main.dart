@@ -9,7 +9,8 @@ import 'features/auth/auth_screen.dart';
 // import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
 import 'screens/workout_tracker_screen.dart'; // Pose detection screen
-import 'features/workout/injury_profile_screen.dart';
+import 'features/workout/injury_profile_screen.dart'; // Step 1: Onboarding
+import 'features/workout/workout_builder_screen.dart'; // Step 2: Plan Generator
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -99,7 +100,7 @@ class AuthGate extends StatelessWidget {
               return const HomeScreen();
             }
 
-            // 4. Profile incomplete, force them into the Onboarding Wizard
+            // 4. Profile incomplete, force them into the static Onboarding Wizard
             return const InjuryProfileScreen();
           },
         );
@@ -211,17 +212,17 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // FEATURE 3: Edit Profile / Plan Routine (Dark Surface)
+              // FEATURE 3: Plan Routine (Dark Surface) -> Routes to new WorkoutBuilderScreen
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const InjuryProfileScreen(),
+                    builder: (_) => const WorkoutBuilderScreen(),
                   ),
                 ),
                 icon: const Icon(Icons.assignment),
                 label: const Text(
-                  'Update My Profile & Routine',
+                  'Build a New Routine',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 style: ElevatedButton.styleFrom(
