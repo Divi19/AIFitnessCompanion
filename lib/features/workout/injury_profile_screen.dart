@@ -1218,7 +1218,7 @@ Strict Rules:
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                        isLast ? 'Generate My Plan 🚀' : 'Continue',
+                        isLast ? 'Proceed' : 'Continue',
                         style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
