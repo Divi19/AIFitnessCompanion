@@ -48,3 +48,8 @@ app.*.map.json
 .env
 .env.local
 .env.*.local
+
+# Firebase generated files — do not commit
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
