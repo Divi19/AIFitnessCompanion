@@ -28,21 +28,42 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  flutter_markdown: ^0.7.3
   flutter:
     sdk: flutter
 
-  firebase_core: ^3.15.2
-  firebase_auth: ^5.4.0
-  cloud_firestore: ^5.6.2
-  cloud_functions: ^5.6.2
-  firebase_vertexai: ^1.0.0
+  # Firebase — all upgraded together to be mutually compatible
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  cloud_functions: ^6.0.6
+  firebase_ai: ^3.8.0
 
-  camera: ^0.11.0
-  google_mlkit_pose_detection: ^0.12.0
-  flutter_riverpod: ^2.5.1
+  # PDF reading
+  syncfusion_flutter_pdf: ^32.2.7
+
+  # File picker
+  file_picker: ^10.3.10
+
+  # HTTP — for embedding REST calls
   http: ^1.2.1
+
+  # State management
+  flutter_riverpod: ^3.2.1
+
+  # Camera & pose detection
+  camera: ^0.11.0
+  google_mlkit_pose_detection: ^0.14.1
+  permission_handler: ^11.3.1
+
+  # Utilities
   uuid: ^4.3.3
-  intl: ^0.19.0
+  intl: ^0.20.2
+  firebase_app_check: ^0.4.1+4
+
+  mobile_scanner: ^5.0.0  # Barcode scanning for snack packages
+  image_picker: ^1.1.2  # Pick image from camera or gallery for meal photos
+  google_generative_ai: ^0.4.6  # Free Gemini API 
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +75,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  build_runner: ^2.11.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
