@@ -96,19 +96,18 @@ class RootNavigationScaffold extends StatefulWidget {
 class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const HomeDashboardTab(),
-    const NutritionAssistantScreen(),
-    const WorkoutTrackerScreen(),
-    const ProfileScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: [
+          const HomeDashboardTab(),
+          const NutritionAssistantScreen(),
+          // THE FIX: Conditionally render the tracker so the camera dies when navigating away
+          _currentIndex == 2 ? const WorkoutTrackerScreen() : const SizedBox(),
+          const ProfileScreen(),
+        ],
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
