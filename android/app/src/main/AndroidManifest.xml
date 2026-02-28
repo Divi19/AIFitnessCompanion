@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Required by image_picker to read photos from gallery -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <!-- Required for internet calls to Gemini API and Open Food Facts -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="ai_fitness_app"
         android:name="${applicationName}"

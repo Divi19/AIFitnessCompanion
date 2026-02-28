@@ -11,6 +11,8 @@ import 'screens/workout_tracker_screen.dart';
 import 'features/workout/injury_profile_screen.dart'; 
 import 'features/workout/workout_builder_screen.dart';
 import 'features/profile/profile_screen.dart';
+import 'screens/workout_tracker_screen.dart'; // Import the new screen for pose detection and correction
+import 'screens/meal_tracker_screen.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -448,6 +450,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           ),
         ],
       ),
+      // Directly boot into the meal tracker for now, to test meal tracker screen
+      home: const MealTrackerScreen()
     );
   }
 }
