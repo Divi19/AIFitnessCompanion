@@ -7,6 +7,35 @@ class RagService {
   final _knowledgeBaseService = KnowledgeBaseService();
   final _db = FirebaseFirestore.instance;
 
+  // Helper to unpack the complex biometrics map into a flat list of injuries
+  List<String> _extractActiveLimitations(Map<String, dynamic>? biometrics) {
+    if (biometrics == null || biometrics['noLimitations'] == true) {
+      return [];
+    }
+
+    final List<String> active = [];
+
+    void checkSection(Map<String, dynamic>? section) {
+      section?.forEach((key, value) {
+        if (value == true) active.add(key);
+      });
+    }
+
+    checkSection(biometrics['upperBody']);
+    checkSection(biometrics['lowerBody']);
+    checkSection(biometrics['coreSpine']);
+
+    // Systemic needs careful handling to translate keys to readable strings
+    final systemic = biometrics['systemic'] as Map<String, dynamic>?;
+    if (systemic?['cardiovascular'] == true) active.add('cardiovascular condition');
+    if (systemic?['respiratoryAsthma'] == true) active.add('asthma');
+    if (systemic?['osteoarthritis'] == true) active.add('osteoarthritis');
+    if (systemic?['wheelchair'] == true) active.add('wheelchair user');
+    if (systemic?['prosthesis'] == true) active.add('uses prosthesis');
+
+    return active;
+  }
+
   Future<String> query({
     required String userQuestion,
     required String userId,
@@ -22,25 +51,25 @@ class RagService {
 
     // STEP 3: Fetch full user profile
     final userDoc = await _db.collection('users').doc(userId).get();
-    final userData = userDoc.data();
+    final userData = userDoc.data() ?? {};
 
-    final userName = userData?['name'] ?? 'the user';
+    final userName = userData['name'] ?? 'the user';
     
-    // Safer list parsing to prevent silent crashes
-    final rawLimitations = userData?['physical_limitations'];
-    final limitations = rawLimitations is List 
-        ? List<String>.from(rawLimitations) 
-        : <String>[];
+    // THE FIX: Parse the new biometrics map instead of the old flat list
+    final biometrics = userData['biometrics'] as Map<String, dynamic>?;
+    final limitations = _extractActiveLimitations(biometrics);
+    final clinicalNotes = biometrics?['clinicalNotes'] as String? ?? '';
 
-    final fatigueScore = (userData?['fatigue_score'] as num?)?.toInt() ?? 5;
-    final fitnessGoal = userData?['fitness_goal'] ?? 'general fitness';
-    final currentStreak = (userData?['current_streak'] as num?)?.toInt() ?? 0;
+    final fatigueScore = (userData['fatigue_score'] as num?)?.toInt() ?? 5;
+    final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
+    final currentStreak = (userData['current_streak'] as num?)?.toInt() ?? 0;
 
     // STEP 4: Build the augmented prompt
     final prompt = _buildPrompt(
       userQuestion: userQuestion,
       userName: userName,
       limitations: limitations,
+      clinicalNotes: clinicalNotes,
       fatigueScore: fatigueScore,
       fitnessGoal: fitnessGoal,
       currentStreak: currentStreak,
@@ -55,6 +84,7 @@ class RagService {
     required String userQuestion,
     required String userName,
     required List<String> limitations,
+    required String clinicalNotes,
     required int fatigueScore,
     required String fitnessGoal,
     required int currentStreak,
@@ -65,8 +95,10 @@ class RagService {
         .map((e) => e['text'])
         .join('\n\n---\n\n');
 
-    final limitationsText =
-        limitations.isEmpty ? 'None reported' : limitations.join(', ');
+    String limitationsText = limitations.isEmpty ? 'None reported' : limitations.join(', ');
+    if (clinicalNotes.isNotEmpty) {
+      limitationsText += '\nClinical Notes: $clinicalNotes';
+    }
 
     String fatigueContext;
     if (fatigueScore >= 8) {
