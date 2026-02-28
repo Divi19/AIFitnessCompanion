@@ -118,6 +118,7 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
           _currentIndex == 2
               ? const WorkoutTrackerScreen()
               : const SizedBox(),
+          const MealTrackerScreen(), // NEW 4TH TAB
           const ProfileScreen(),
         ],
       ),
@@ -139,7 +140,9 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
             BottomNavigationBarItem(
                 icon: Icon(Icons.chat_bubble), label: 'Assistant'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.camera_alt), label: 'Tracker'),
+                icon: Icon(Icons.camera_alt), label: 'Pose'), // RENAMED
+            BottomNavigationBarItem(
+                icon: Icon(Icons.restaurant), label: 'Meals'), // NEW TAB
             BottomNavigationBarItem(
                 icon: Icon(Icons.person), label: 'Profile'),
           ],
@@ -381,13 +384,69 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Calories Progress Bar
+                    // Generate Routine Button
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFFF5E00),
+                            const Color(0xFFFF5E00).withOpacity(0.8)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF5E00).withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const WorkoutBuilderScreen()),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                vertical: 24, horizontal: 24),
+                            child: Column(
+                              children: [
+                                Icon(Icons.bolt,
+                                    size: 36, color: Colors.white),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Generate Routine',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Calories Progress Bar (COLORS SWAPPED)
                     const Text(
                       "Calories Intake:",
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFFF5E00)),
+                          color: Color(0xFFB9FF2B)), // Changed to Volt Green
                     ),
                     const SizedBox(height: 16),
 
@@ -397,9 +456,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         value: calorieProgress,
                         minHeight: 24,
                         backgroundColor:
-                            const Color(0xFFB9FF2B).withOpacity(0.15),
+                            const Color(0xFFFF5E00).withOpacity(0.15), // Changed to Translucent Orange
                         valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFFB9FF2B)),
+                            Color(0xFFFF5E00)), // Changed to Solid Orange
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -469,62 +528,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                           ),
                         ),
                       ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Generate Routine Button
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFFFF5E00),
-                            const Color(0xFFFF5E00).withOpacity(0.8)
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF5E00).withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const WorkoutBuilderScreen()),
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(
-                                vertical: 24, horizontal: 24),
-                            child: Column(
-                              children: [
-                                Icon(Icons.bolt,
-                                    size: 36, color: Colors.white),
-                                SizedBox(height: 12),
-                                Text(
-                                  'Generate Routine',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
 
                     const SizedBox(height: 20),
