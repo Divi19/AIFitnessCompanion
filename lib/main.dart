@@ -7,12 +7,12 @@ import 'firebase_options.dart';
 import 'core/constants.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/nutrition/nutrition_assistant.dart';
-import 'screens/workout_tracker_screen.dart'; 
-import 'features/workout/injury_profile_screen.dart'; 
+import 'features/workout/injury_profile_screen.dart';
 import 'features/workout/workout_builder_screen.dart';
 import 'features/profile/profile_screen.dart';
-import 'screens/workout_tracker_screen.dart'; // Import the new screen for pose detection and correction
-import 'screens/meal_tracker_screen.dart'; 
+import 'features/admin/admin_ingestion.dart';
+import 'screens/workout_tracker_screen.dart';
+import 'screens/meal_tracker_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,9 +35,9 @@ class MyApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0D0D0D),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFB9FF2B), // Volt Lime Green
-          secondary: Color(0xFFFF5E00), // Electric Orange
-          surface: Color(0xFF1A1A1A), 
+          primary: Color(0xFFB9FF2B),
+          secondary: Color(0xFFFF5E00),
+          surface: Color(0xFF1A1A1A),
         ),
         useMaterial3: true,
       ),
@@ -46,7 +46,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ── AUTH GATE (THE INTERCEPTOR) ─────────────────────────────────────────────
+// ── AUTH GATE ────────────────────────────────────────────────────────────────
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -56,7 +56,9 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B))));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B))),
+          );
         }
 
         if (!snapshot.hasData || snapshot.data == null) {
@@ -66,17 +68,24 @@ class AuthGate extends StatelessWidget {
         final user = snapshot.data!;
 
         return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots(),
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B))));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B))),
+              );
             }
 
-            final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
-            final isProfileCompleted = userData?['profile_completed'] == true;
+            final userData =
+                userSnapshot.data?.data() as Map<String, dynamic>?;
+            final isProfileCompleted =
+                userData?['profile_completed'] == true;
 
             if (isProfileCompleted) {
-              return const RootNavigationScaffold(); // Routes to the new Tabbed layout
+              return const RootNavigationScaffold();
             }
 
             return const InjuryProfileScreen();
@@ -87,7 +96,7 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// ── ROOT NAVIGATION SCAFFOLD (Bottom Tabs) ──────────────────────────────────
+// ── ROOT NAVIGATION SCAFFOLD ─────────────────────────────────────────────────
 class RootNavigationScaffold extends StatefulWidget {
   const RootNavigationScaffold({super.key});
 
@@ -106,8 +115,10 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
         children: [
           const HomeDashboardTab(),
           const NutritionAssistantScreen(),
-          // THE FIX: Conditionally render the tracker so the camera dies when navigating away
-          _currentIndex == 2 ? const WorkoutTrackerScreen() : const SizedBox(),
+          // Camera is only active when this tab is selected — avoids resource leak
+          _currentIndex == 2
+              ? const WorkoutTrackerScreen()
+              : const SizedBox(),
           const ProfileScreen(),
         ],
       ),
@@ -120,14 +131,18 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
           onTap: (index) => setState(() => _currentIndex = index),
           backgroundColor: const Color(0xFF0D0D0D),
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFFB9FF2B), // Volt Green active tab
+          selectedItemColor: const Color(0xFFB9FF2B),
           unselectedItemColor: Colors.grey,
           showUnselectedLabels: true,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Assistant'),
-            BottomNavigationBarItem(icon: Icon(Icons.camera_alt), label: 'Tracker'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.home_filled), label: 'Home'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.chat_bubble), label: 'Assistant'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.camera_alt), label: 'Tracker'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
@@ -135,7 +150,7 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   }
 }
 
-// ── HOME DASHBOARD TAB (Upgraded to StatefulWidget) ─────────────────────────
+// ── HOME DASHBOARD TAB ───────────────────────────────────────────────────────
 class HomeDashboardTab extends StatefulWidget {
   const HomeDashboardTab({super.key});
 
@@ -153,75 +168,96 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
     return SafeArea(
       child: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B)));
+            return const Center(
+                child: CircularProgressIndicator(
+                    color: Color(0xFFB9FF2B)));
           }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final data =
+              snapshot.data!.data() as Map<String, dynamic>? ?? {};
           final name = data['name'] ?? 'Athlete';
           final streak = data['current_streak'] ?? 0;
           final fatigue = data['fatigue_score'] ?? 5;
 
-          // Extract Data
-          final bodyStats = data['body_stats'] as Map<String, dynamic>? ?? {};
-          final healthInsights = data['health_insights'] as Map<String, dynamic>? ?? {};
-          
-          final currentWeightStr = bodyStats['weight'] ?? '-- kg';
-          final unit = currentWeightStr.toString().contains('lbs') ? 'lbs' : 'kg';
-          
-          final targetWeightRaw = bodyStats['target_weight'];
-          final targetWeightStr = targetWeightRaw != null ? '$targetWeightRaw$unit' : currentWeightStr;
+          final bodyStats =
+              data['body_stats'] as Map<String, dynamic>? ?? {};
+          final healthInsights =
+              data['health_insights'] as Map<String, dynamic>? ?? {};
 
-          final recommendedCalories = healthInsights['suggested_calories'] ?? 2000;
-          final int currentIntake = 1200; 
-          
-          double calorieProgress = currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
+          final currentWeightStr = bodyStats['weight'] ?? '-- kg';
+          final unit = currentWeightStr.toString().contains('lbs')
+              ? 'lbs'
+              : 'kg';
+
+          final targetWeightRaw = bodyStats['target_weight'];
+          final targetWeightStr = targetWeightRaw != null
+              ? '$targetWeightRaw $unit'
+              : currentWeightStr;
+
+          final recommendedCalories =
+              healthInsights['suggested_calories'] ?? 2000;
+          const int currentIntake = 1200;
+
+          double calorieProgress =
+              currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
           if (calorieProgress > 1.0) calorieProgress = 1.0;
 
-          // Determine color for fatigue based on severity
-          final fatigueColor = fatigue > 7 ? const Color(0xFFFF5E00) : const Color(0xFFB9FF2B);
+          final fatigueColor = fatigue > 7
+              ? const Color(0xFFFF5E00)
+              : const Color(0xFFB9FF2B);
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Personalized Greeting
+                // Greeting
                 Center(
                   child: Column(
                     children: [
                       const Text(
                         'welcome back,',
                         style: TextStyle(
-                          fontSize: 18, 
-                          color: Color(0xFFB9FF2B), // Brightened to solid Volt Green
+                          fontSize: 18,
+                          color: Color(0xFFB9FF2B),
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.2,
                         ),
                       ),
                       Text(
-                        name.toString().split(' ').first, 
-                        style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.white),
+                        name.toString().split(' ').first,
+                        style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white),
                       ),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 32),
 
-                // 2. Weight Goal Card (Now with Neon Glow)
+                // Weight Goal Card
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 24, horizontal: 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A), 
+                    color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.5), width: 2), // Brighter border
+                    border: Border.all(
+                        color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                        width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.15), // Neon glow effect
+                        color: const Color(0xFFB9FF2B).withOpacity(0.15),
                         blurRadius: 30,
                         spreadRadius: 2,
                       ),
@@ -232,16 +268,18 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                       Text(
                         targetWeightStr,
                         style: const TextStyle(
-                          fontSize: 42, 
-                          fontWeight: FontWeight.bold, 
-                          color: Color(0xFFB9FF2B), // Popping Volt Green
-                          height: 1
-                        ),
+                            fontSize: 42,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFB9FF2B),
+                            height: 1),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'current weight: $currentWeightStr',
-                        style: const TextStyle(fontSize: 16, color: Colors.white70, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -249,55 +287,70 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                 const SizedBox(height: 32),
 
-                // 3. Today's Exercise Checklist
+                // Today's Exercise Checklist
                 const Text(
                   "Today's Exercise:",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFB9FF2B)), // Color-coded title
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFB9FF2B)),
                 ),
                 const SizedBox(height: 12),
-                
+
                 Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24), // Slightly more visible border
+                    border: Border.all(color: Colors.white24),
                   ),
                   child: Column(
                     children: [
                       CheckboxListTile(
-                        title: Text(
-                          'hit 10k steps', 
-                          style: TextStyle(
-                            color: step1 ? Colors.white38 : Colors.white, // Dims when checked
-                            fontWeight: FontWeight.bold,
-                            decoration: step1 ? TextDecoration.lineThrough : null,
-                            decorationColor: const Color(0xFFFF5E00), // Orange strikethrough
-                          )
-                        ),
+                        title: Text('hit 10k steps',
+                            style: TextStyle(
+                              color: step1
+                                  ? Colors.white38
+                                  : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              decoration: step1
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              decorationColor:
+                                  const Color(0xFFFF5E00),
+                            )),
                         value: step1,
-                        onChanged: (val) => setState(() => step1 = val!),
-                        activeColor: const Color(0xFFFF5E00), 
+                        onChanged: (val) =>
+                            setState(() => step1 = val!),
+                        activeColor: const Color(0xFFFF5E00),
                         checkColor: Colors.white,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                        controlAffinity:
+                            ListTileControlAffinity.leading,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8),
                       ),
                       const Divider(height: 1, color: Colors.white10),
                       CheckboxListTile(
-                        title: Text(
-                          'HIIT workout', 
-                          style: TextStyle(
-                            color: step2 ? Colors.white38 : Colors.white, // Dims when checked
-                            fontWeight: FontWeight.bold,
-                            decoration: step2 ? TextDecoration.lineThrough : null,
-                            decorationColor: const Color(0xFFFF5E00), // Orange strikethrough
-                          )
-                        ),
+                        title: Text('HIIT workout',
+                            style: TextStyle(
+                              color: step2
+                                  ? Colors.white38
+                                  : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              decoration: step2
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              decorationColor:
+                                  const Color(0xFFFF5E00),
+                            )),
                         value: step2,
-                        onChanged: (val) => setState(() => step2 = val!),
+                        onChanged: (val) =>
+                            setState(() => step2 = val!),
                         activeColor: const Color(0xFFFF5E00),
                         checkColor: Colors.white,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                        controlAffinity:
+                            ListTileControlAffinity.leading,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8),
                       ),
                     ],
                   ),
@@ -305,28 +358,41 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                 const SizedBox(height: 32),
 
-                // 4. Calories Progress Bar
+                // Calories Progress Bar
                 const Text(
                   "Calories Intake:",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFF5E00)), // Color-coded title
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFF5E00)),
                 ),
                 const SizedBox(height: 16),
-                
+
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: LinearProgressIndicator(
                     value: calorieProgress,
                     minHeight: 24,
-                    backgroundColor: const Color(0xFFB9FF2B).withOpacity(0.15), // Translucent green track
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFB9FF2B)), 
+                    backgroundColor:
+                        const Color(0xFFB9FF2B).withOpacity(0.15),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFFB9FF2B)),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Intake: $currentIntake kcal', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                    Text('Goal: $recommendedCalories kcal', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Text('Intake: $currentIntake kcal',
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                    Text('Goal: $recommendedCalories kcal',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
                   ],
                 ),
 
@@ -334,7 +400,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 24),
 
-                // 5. Existing Vitals Row (Now fully colored)
+                // Vitals Row
                 Row(
                   children: [
                     Expanded(
@@ -342,9 +408,11 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: 'Day Streak',
                         value: '$streak',
                         icon: Icons.local_fire_department,
-                        bgColor: const Color(0xFFFF5E00).withOpacity(0.15), // Tinted Orange Background
-                        textColor: const Color(0xFFFF5E00), // Orange Text
-                        borderColor: const Color(0xFFFF5E00).withOpacity(0.5),
+                        bgColor:
+                            const Color(0xFFFF5E00).withOpacity(0.15),
+                        textColor: const Color(0xFFFF5E00),
+                        borderColor:
+                            const Color(0xFFFF5E00).withOpacity(0.5),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -353,8 +421,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: 'Fatigue',
                         value: '$fatigue/10',
                         icon: Icons.battery_charging_full,
-                        bgColor: fatigueColor.withOpacity(0.15), // Tinted Dynamic Background
-                        textColor: fatigueColor, // Dynamic Text (Green or Orange)
+                        bgColor: fatigueColor.withOpacity(0.15),
+                        textColor: fatigueColor,
                         borderColor: fatigueColor.withOpacity(0.5),
                       ),
                     ),
@@ -363,19 +431,22 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                 const SizedBox(height: 24),
 
-                // 6. Generate Routine Button 
+                // Generate Routine Button
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [const Color(0xFFFF5E00), const Color(0xFFFF5E00).withOpacity(0.8)],
+                      colors: [
+                        const Color(0xFFFF5E00),
+                        const Color(0xFFFF5E00).withOpacity(0.8)
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF5E00).withOpacity(0.3), // Slightly boosted glow
+                        color: const Color(0xFFFF5E00).withOpacity(0.3),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -387,15 +458,19 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                       borderRadius: BorderRadius.circular(20),
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const WorkoutBuilderScreen()),
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                const WorkoutBuilderScreen()),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            vertical: 24, horizontal: 24),
                         child: Column(
                           children: [
-                            const Icon(Icons.bolt, size: 36, color: Colors.white),
-                            const SizedBox(height: 12),
-                            const Text(
+                            Icon(Icons.bolt,
+                                size: 36, color: Colors.white),
+                            SizedBox(height: 12),
+                            Text(
                               'Generate Routine',
                               style: TextStyle(
                                 fontSize: 18,
@@ -409,7 +484,22 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     ),
                   ),
                 ),
-                
+
+                const SizedBox(height: 20),
+
+                // Admin button — hidden at bottom, not prominent
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AdminIngestionScreen()),
+                  ),
+                  child: const Text(
+                    'Admin: Ingest PDFs',
+                    style: TextStyle(color: Colors.white24, fontSize: 12),
+                  ),
+                ),
+
                 const SizedBox(height: 20),
               ],
             ),
@@ -441,17 +531,21 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: textColor),
+            style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: textColor),
           ),
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor.withOpacity(0.8)), // Slightly brighter title
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textColor.withOpacity(0.8)),
           ),
         ],
       ),
-      // Directly boot into the meal tracker for now, to test meal tracker screen
-      home: const MealTrackerScreen()
     );
   }
 }
