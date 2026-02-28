@@ -8,6 +8,7 @@ import 'features/auth/auth_screen.dart';
 import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
 import 'screens/workout_tracker_screen.dart'; // Pose detection screen
+import 'features/workout/injury_profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -156,7 +157,6 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // FEATURE 2: Pose Detection Workout Tracker (Orange)
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -182,6 +182,21 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 40),
 
               // Admin Route (Subtle)
+                    builder: (_) => const InjuryProfileScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.fitness_center),
+                label: const Text('Plan My Routine'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple[300],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              // Admin — subtle, not prominent for demo users
               TextButton(
                 onPressed: () => Navigator.push(
                   context,
