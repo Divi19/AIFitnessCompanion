@@ -44,6 +44,10 @@ dependencies:
   uuid: ^4.3.3
   intl: ^0.19.0
 
+  mobile_scanner: ^5.0.0  # Barcode scanning for snack packages
+  image_picker: ^1.1.2  # Pick image from camera or gallery for meal photos
+  google_generative_ai: ^0.4.6  # Free Gemini API 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
