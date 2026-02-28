@@ -20,12 +20,10 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
   int _currentStep = 0;
   bool _isLoading = false;
 
-  // ── Animation — single controller, always valid ──────────────────────────
   late final AnimationController _fadeController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 350),
   );
-  // Derived non-null animation
   late final Animation<double> _fadeAnim = CurvedAnimation(
     parent: _fadeController,
     curve: Curves.easeInOut,
@@ -39,7 +37,10 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
   String _weightUnit = 'kg';
   String _heightUnit = 'cm';
 
-  // ── STEP 2: Limitations (Formerly Step 4) ────────────────────────────────
+  // ── STEP 2: Insights & Targets (NEW) ─────────────────────────────────────
+  final _targetWeightController = TextEditingController();
+
+  // ── STEP 3: Limitations ──────────────────────────────────────────────────
   bool rotatorCuff = false;
   bool deltoids = false;
   bool pectorals = false;
@@ -71,6 +72,11 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
   void initState() {
     super.initState();
     _fadeController.forward();
+    
+    // Listen to target weight changes to update the calorie recommendation live
+    _targetWeightController.addListener(() {
+      setState(() {}); 
+    });
   }
 
   @override
@@ -80,8 +86,69 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
     _weightController.dispose();
     _heightController.dispose();
     _ageController.dispose();
+    _targetWeightController.dispose();
     _clinicalNotesController.dispose();
     super.dispose();
+  }
+
+  // ── MATH & CALCULATION HELPERS ───────────────────────────────────────────
+  
+  double _getKg() {
+    final w = double.tryParse(_weightController.text) ?? 0.0;
+    return _weightUnit == 'lbs' ? w * 0.453592 : w;
+  }
+
+  double _getCm() {
+    final h = double.tryParse(_heightController.text) ?? 0.0;
+    return _heightUnit == 'ft' ? h * 30.48 : h; 
+  }
+
+  double _getBMI() {
+    final kg = _getKg();
+    final m = _getCm() / 100;
+    if (m <= 0 || kg <= 0) return 0.0;
+    return kg / (m * m);
+  }
+
+  String _getBMICategory(double bmi) {
+    if (bmi == 0) return 'Unknown';
+    if (bmi < 18.5) return 'Underweight';
+    if (bmi >= 18.5 && bmi <= 24.9) return 'Healthy';
+    if (bmi >= 25 && bmi <= 29.9) return 'Overweight';
+    return 'Obese';
+  }
+
+  Color _getBMIColor(double bmi) {
+    if (bmi == 0) return Colors.grey;
+    if (bmi < 18.5) return const Color(0xFFFFCC00); // Yellow
+    if (bmi >= 18.5 && bmi <= 24.9) return const Color(0xFFB9FF2B); // Volt Green
+    if (bmi >= 25 && bmi <= 29.9) return const Color(0xFFFF5E00); // Orange
+    return Colors.redAccent;
+  }
+
+  int _getCalories() {
+    final kg = _getKg();
+    final cm = _getCm();
+    final age = int.tryParse(_ageController.text) ?? 25;
+    if (kg <= 0 || cm <= 0) return 0;
+
+    // Mifflin-St Jeor Equation for BMR
+    double bmr = (10 * kg) + (6.25 * cm) - (5 * age);
+    bmr += (_gender == 'Male') ? 5 : -161;
+
+    // Assume lightly active multiplier for baseline TDEE
+    double tdee = bmr * 1.375;
+
+    final target = double.tryParse(_targetWeightController.text);
+    if (target != null && target > 0) {
+      final targetKg = _weightUnit == 'lbs' ? target * 0.453592 : target;
+      // If they want to lose weight (deficit)
+      if (targetKg < kg - 1) return (tdee - 500).round(); 
+      // If they want to gain muscle (surplus)
+      if (targetKg > kg + 1) return (tdee + 300).round(); 
+    }
+    // Maintenance
+    return tdee.round(); 
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -117,7 +184,17 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
   }
 
   void _nextStep() {
-    if (_currentStep < 1) { // Reduced from 3 to 1 since there are only 2 steps now
+    if (_currentStep == 0) {
+      // Basic validation before going to math screen
+      if (_weightController.text.isEmpty || _heightController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter weight and height first.')),
+        );
+        return;
+      }
+    }
+
+    if (_currentStep < 2) { // 3 steps total now (0, 1, 2)
       _fadeController.reset();
       setState(() => _currentStep++);
       _pageController.nextPage(duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
@@ -142,6 +219,8 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final limitations = _getActiveLimitations();
       final limitationsText = limitations.isEmpty ? 'None' : limitations.join(', ');
+      final targetWeightStr = _targetWeightController.text.trim();
+      final targetStr = targetWeightStr.isEmpty ? 'Maintain weight' : '$targetWeightStr $_weightUnit';
 
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'body_stats': {
@@ -149,6 +228,11 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
           'height': '${_heightController.text} $_heightUnit',
           'age': _ageController.text,
           'gender': _gender,
+          'target_weight': targetWeightStr.isEmpty ? null : targetWeightStr,
+        },
+        'health_insights': {
+          'bmi': double.parse(_getBMI().toStringAsFixed(1)),
+          'suggested_calories': _getCalories(),
         },
         'biometrics': {
           'upperBody': {
@@ -183,8 +267,11 @@ Generate a detailed, safe general workout plan for this user.
 User Profile:
 - Age: ${_ageController.text} years old
 - Gender: $_gender
-- Weight: ${_weightController.text} $_weightUnit
+- Current Weight: ${_weightController.text} $_weightUnit
+- Target Weight: $targetStr
 - Height: ${_heightController.text} $_heightUnit
+- Calculated BMI: ${_getBMI().toStringAsFixed(1)}
+- Daily Calorie Target: ${_getCalories()} kcal
 - Physical Limitations / Injuries: $limitationsText
 - Clinical Notes: ${_clinicalNotesController.text.isEmpty ? 'None' : _clinicalNotesController.text}
 - Uses Wheelchair: $usesWheelchair
@@ -199,8 +286,6 @@ Strict Rules:
 - End with weekly recovery tips
 ''';
 
-      print('KEY LENGTH: ${AppConstants.geminiApiKey.length}');
-
       final response = await http.post(
         Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AppConstants.geminiApiKey}',
@@ -211,20 +296,16 @@ Strict Rules:
         }),
       );
 
-      print('STATUS: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final plan = data['candidates'][0]['content']['parts'][0]['text'];
+        final plan = data['candidates']['content']['parts']['text'];
         if (mounted) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => WorkoutPlanScreen(plan: plan)));
         }
       } else {
-        print('BODY: ${response.body}');
         throw Exception('Gemini API error: ${response.statusCode}');
       }
     } catch (e) {
-      print('ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -239,7 +320,7 @@ Strict Rules:
   //  BUILD
   // ─────────────────────────────────────────────────────────────────────────
 
-  final List<String> _stepLabels = ['Body Stats', 'Limitations'];
+  final List<String> _stepLabels = ['Body Stats', 'Insights', 'Limitations'];
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +351,8 @@ Strict Rules:
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildStep1(),
-                _buildStep2(), // This is now the Limitations step
+                _buildStep2(), // NEW: Insights & Target
+                _buildStep3(), // WAS: Limitations
               ],
             ),
           ),
@@ -344,7 +426,7 @@ Strict Rules:
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
-                        color: sel ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A), // Electric Orange / Dark Surface
+                        color: sel ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A), 
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: sel ? const Color(0xFFFF5E00) : Colors.white12),
                       ),
@@ -365,7 +447,7 @@ Strict Rules:
             const SizedBox(height: 8),
             _field(controller: _ageController, hint: 'e.g. 25', suffix: 'years', keyboard: TextInputType.number),
             const SizedBox(height: 20),
-            _label('Body Weight'),
+            _label('Current Weight'),
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: _field(controller: _weightController, hint: 'e.g. 70', keyboard: TextInputType.number)),
@@ -387,8 +469,136 @@ Strict Rules:
     );
   }
 
-  // ── STEP 2: LIMITATIONS ───────────────────────────────────────────────────
+  // ── STEP 2: INSIGHTS & TARGET (NEW) ──────────────────────────────────────
   Widget _buildStep2() {
+    final bmi = _getBMI();
+    final bmiCategory = _getBMICategory(bmi);
+    final bmiColor = _getBMIColor(bmi);
+    final calories = _getCalories();
+
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            _stepHeader('Insights & Target', 'Your body metrics and daily energy goal', Icons.insights),
+            const SizedBox(height: 24),
+
+            // BMI CARD
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Your BMI', style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(
+                          bmi > 0 ? bmi.toStringAsFixed(1) : '--',
+                          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: bmiColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: bmiColor),
+                    ),
+                    child: Text(
+                      bmiCategory,
+                      style: TextStyle(color: bmiColor, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  )
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            _label('Desired Target Weight (Optional)'),
+            const SizedBox(height: 8),
+            _field(
+              controller: _targetWeightController, 
+              hint: 'e.g. 65', 
+              suffix: _weightUnit, 
+              keyboard: TextInputType.number
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Leave blank if you want to maintain your current weight.',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+
+            const SizedBox(height: 24),
+
+            // CALORIES CARD
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [const Color(0xFFFF5E00).withOpacity(0.1), Colors.transparent],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.local_fire_department, color: Color(0xFFFF5E00), size: 20),
+                      const SizedBox(width: 8),
+                      const Text('Recommended Intake', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        calories > 0 ? '$calories' : '--',
+                        style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, height: 1),
+                      ),
+                      const SizedBox(width: 6),
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: Text('kcal / day', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Based on the Mifflin-St Jeor formula adjusted for your target weight.',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── STEP 3: LIMITATIONS ───────────────────────────────────────────────────
+  Widget _buildStep3() {
     return FadeTransition(
       opacity: _fadeAnim,
       child: SingleChildScrollView(
@@ -418,7 +628,6 @@ Strict Rules:
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  // Solid Volt Green to indicate clear/healthy state
                   color: noLimitations ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: noLimitations ? const Color(0xFFB9FF2B) : Colors.white12, width: noLimitations ? 2 : 1),
@@ -492,7 +701,7 @@ Strict Rules:
 
   // ── BOTTOM BUTTON ─────────────────────────────────────────────────────────
   Widget _buildBottomButton() {
-    final isLast = _currentStep == 1;
+    final isLast = _currentStep == 2;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       decoration: BoxDecoration(
@@ -514,7 +723,7 @@ Strict Rules:
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(isLast ? 'Proceed' : 'Continue',
+                    Text(isLast ? 'Generate My Plan 🚀' : 'Continue',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
                     if (!isLast) ...[const SizedBox(width: 8), const Icon(Icons.arrow_forward, color: Colors.white, size: 18)],
                   ],
@@ -601,7 +810,7 @@ Strict Rules:
             child: Text(title, style: const TextStyle(color: Color(0xFFFF5E00), fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
           ),
           const Divider(color: Colors.white12, height: 1),
-          ...items.map((item) => _checkRow(item[0] as String, item[1] as bool, item[2] as Function(bool?))),
+          ...items.map((item) => _checkRow(item as String, item as bool, item as Function(bool?))),
         ],
       ),
     );

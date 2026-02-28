@@ -10,7 +10,7 @@ import 'features/nutrition/nutrition_assistant.dart';
 import 'screens/workout_tracker_screen.dart'; 
 import 'features/workout/injury_profile_screen.dart'; 
 import 'features/workout/workout_builder_screen.dart';
-import 'features/profile/profile_screen.dart'; // NEW: We will create this next!
+import 'features/profile/profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
