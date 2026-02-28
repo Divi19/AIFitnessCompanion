@@ -139,7 +139,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0D0D0D), // Deep Black
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
@@ -151,7 +151,7 @@ class _AuthScreenState extends State<AuthScreen> {
               const Icon(
                 Icons.fitness_center,
                 size: 56,
-                color: Colors.deepPurple,
+                color: Color(0xFFB9FF2B), // Volt Green
               ),
               const SizedBox(height: 12),
               Text(
@@ -160,7 +160,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple,
+                  color: Colors.white,
                 ),
               ),
               Text(
@@ -168,7 +168,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ? 'Sign in to your AI Fitness Companion'
                     : 'Set up your personalised fitness profile',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
 
               const SizedBox(height: 36),
@@ -183,7 +183,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _goalController,
-                  label: 'Fitness Goal (e.g. muscle hypertrophy, weight loss)',
+                  label: 'Fitness Goal (e.g. hypertrophy, fat loss)',
                   icon: Icons.flag_outlined,
                 ),
                 const SizedBox(height: 24),
@@ -194,24 +194,38 @@ class _AuthScreenState extends State<AuthScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'The AI uses this to personalise recommendations and flag unsafe exercises.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: _availableLimitations.map((limitation) {
                     final selected = _selectedLimitations.contains(limitation);
                     return FilterChip(
-                      label: Text(limitation),
+                      label: Text(
+                        limitation,
+                        style: TextStyle(
+                          color: selected ? Colors.black : Colors.white70,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
                       selected: selected,
-                      selectedColor: Colors.deepPurple[100],
-                      checkmarkColor: Colors.deepPurple,
+                      backgroundColor: const Color(0xFF1A1A1A), // Dark surface
+                      selectedColor: const Color(0xFFB9FF2B), // Volt Green
+                      checkmarkColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: selected ? const Color(0xFFB9FF2B) : Colors.white10,
+                        ),
+                      ),
                       onSelected: (val) {
                         setState(() {
                           if (limitation == 'None') {
@@ -249,40 +263,44 @@ class _AuthScreenState extends State<AuthScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
+                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
+                  labelStyle: TextStyle(color: Colors.grey),
+                  prefixIcon: Icon(Icons.lock_outline, color: Colors.grey),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
+                      color: Colors.grey,
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: const Color(0xFF1A1A1A), // Dark surface
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // ── Error message ─────────────────────────────────────────────
               if (_errorMessage.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red[50],
+                    color: const Color(0xFFFF5E00).withOpacity(0.15), // Electric Orange tint
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red[200]!),
+                    border: Border.all(color: const Color(0xFFFF5E00)),
                   ),
                   child: Text(
                     _errorMessage,
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                    style: const TextStyle(color: Color(0xFFFF5E00), fontSize: 13),
                   ),
                 ),
 
@@ -294,20 +312,21 @@ class _AuthScreenState extends State<AuthScreen> {
                     ? null
                     : (_isLogin ? _login : _signUp),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: const Color(0xFFB9FF2B), // Volt Green
+                  foregroundColor: Colors.black, // High contrast text
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  disabledBackgroundColor: Colors.grey[300],
+                  disabledBackgroundColor: const Color(0xFF1A1A1A),
+                  disabledForegroundColor: Colors.grey,
                 ),
                 child: _isLoading
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
-                          color: Colors.white,
+                          color: Colors.black,
                           strokeWidth: 2,
                         ),
                       )
@@ -315,7 +334,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         _isLogin ? 'Sign In' : 'Create Account',
                         style: const TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
               ),
@@ -334,7 +353,10 @@ class _AuthScreenState extends State<AuthScreen> {
                   _isLogin
                       ? "Don't have an account? Sign Up"
                       : 'Already have an account? Sign In',
-                  style: const TextStyle(color: Colors.deepPurple),
+                  style: const TextStyle(
+                    color: Color(0xFFB9FF2B), // Volt Green link
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -354,14 +376,17 @@ class _AuthScreenState extends State<AuthScreen> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon),
+        labelStyle: TextStyle(color: Colors.grey),
+        prefixIcon: Icon(icon, color: Colors.grey),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         filled: true,
-        fillColor: Colors.grey[50],
+        fillColor: const Color(0xFF1A1A1A), // Dark surface
       ),
     );
   }

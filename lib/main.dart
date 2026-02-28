@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added Firestore import
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'core/constants.dart';
 import 'features/auth/auth_screen.dart';
-import 'features/admin/admin_ingestion.dart';
+// import 'features/admin/admin_ingestion.dart';
 import 'features/nutrition/nutrition_assistant.dart';
 import 'screens/workout_tracker_screen.dart'; // Pose detection screen
 import 'features/workout/injury_profile_screen.dart';
@@ -50,7 +51,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ── AUTH GATE ───────────────────────────────────────────────────────────────
+// ── AUTH GATE (THE INTERCEPTOR) ─────────────────────────────────────────────
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -69,11 +70,39 @@ class AuthGate extends StatelessWidget {
           );
         }
 
+        // 1. Not signed in — show auth screen
         if (!snapshot.hasData || snapshot.data == null) {
           return const AuthScreen();
         }
 
-        return const HomeScreen();
+        final user = snapshot.data!;
+
+        // 2. Signed in — Intercept and check Firestore for profile_completed
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFB9FF2B),
+                  ),
+                ),
+              );
+            }
+
+            final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
+            final isProfileCompleted = userData?['profile_completed'] == true;
+
+            // 3. Profile is finished, unlock the Home Screen
+            if (isProfileCompleted) {
+              return const HomeScreen();
+            }
+
+            // 4. Profile incomplete, force them into the Onboarding Wizard
+            return const InjuryProfileScreen();
+          },
+        );
       },
     );
   }
@@ -115,7 +144,7 @@ class HomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const Text(
                 'Welcome back',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey),
@@ -182,7 +211,7 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // FEATURE 3: Injury Profile / Plan Routine (Dark Surface)
+              // FEATURE 3: Edit Profile / Plan Routine (Dark Surface)
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -192,7 +221,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.assignment),
                 label: const Text(
-                  'Plan My Routine',
+                  'Update My Profile & Routine',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -203,22 +232,6 @@ class HomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     side: const BorderSide(color: Colors.white10), // Subtle outline
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Admin Route (Subtle)
-              TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminIngestionScreen(),
-                  ),
-                ),
-                child: const Text(
-                  'Admin: Ingest PDFs',
-                  style: TextStyle(color: Colors.grey),
                 ),
               ),
             ],
