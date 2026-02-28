@@ -101,12 +101,14 @@ All confirmed entries are saved to Firebase Firestore under the user's account.
 - Daily exercise to-do list  
 - Streak tracking to sustain long-term motivation  
 
+---
+
 # 🛠️ Technologies Used
 
 ## 🚀 Google Technologies
 
 | Technology | Purpose |
-|------------|----------|
+|------------|---------|
 | **Flutter** | Cross-platform mobile UI framework — single codebase for Android and iOS |
 | **Firebase Authentication** | Secure user sign-in and session management; links all user data via a single UID |
 | **Firebase Cloud Firestore** | Primary NoSQL database — stores user profiles, meal logs, workout history, and RAG vector embeddings with built-in vector similarity search |
@@ -120,6 +122,121 @@ All confirmed entries are saved to Firebase Firestore under the user's account.
 | **Google Cloud Vertex AI** | Enterprise AI infrastructure backing Firebase AI Logic for scalable model inference |
 | **Google Cloud Run** | Serverless platform for any server-side processing beyond Firebase native capabilities |
 | **Android Studio** | Primary IDE with Flutter tooling, built-in emulator, and performance profiling |
+
+---
+
+# ⚙️ Installation & Setup (Windows — Android Only)
+
+### Prerequisites
+Install the following before cloning the project:
+
+- [VS Code](https://code.visualstudio.com) with **Flutter** and **Dart** extensions (restart VS Code after installing)
+- [Java JDK 17](https://adoptium.net) — choose Temurin 17 LTS, Windows x64 .msi. Check "Set JAVA_HOME" during installation
+- [Android Studio](https://developer.android.com/studio) — run the setup wizard, select **Standard** install, accept all licenses, let it download the SDK
+- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) — extract to `C:\dev\flutter`, then add `C:\dev\flutter\bin` to your system PATH via Environment Variables
+- [Node.js LTS](https://nodejs.org) — accept all defaults
+
+> After any PATH change on Windows, always open a **new** Command Prompt before running verification commands.
+
+---
+
+### 1. Create an Android Emulator
+Inside Android Studio:
+1. Go to **More Actions → Virtual Device Manager → Create Device**
+2. Select **Pixel 7 → Next**
+3. Download and select **API 34 (Android 14) → Finish**
+4. Press Play to confirm it boots
+
+---
+
+### 2. Accept Android Licenses
+```bash
+flutter doctor --android-licenses
+# Press y to accept each one
+```
+
+---
+
+### 3. Verify Full Setup
+```bash
+flutter doctor
+```
+All items must show `[✓]`. Do not proceed until there are no `[✗]` errors.
+
+> **Common fix:** If `flutter doctor` shows Android SDK Command-line Tools missing, open Android Studio → SDK Manager → SDK Tools tab → check **Android SDK Command-line Tools** → Apply.
+
+---
+
+### 4. Install Firebase & FlutterFire CLI
+```bash
+npm install -g firebase-tools
+firebase login
+dart pub global activate flutterfire_cli
+```
+
+Then add this to your Windows PATH:
+```
+C:\Users\<YourName>\AppData\Local\Pub\Cache\bin
+```
+
+Verify with:
+```bash
+flutterfire --version
+```
+
+---
+
+### 5. Clone & Install Dependencies
+```bash
+git clone <project-url>
+cd ai-fitness-companion
+flutter pub get
+```
+
+---
+
+### 6. Connect to Firebase
+Inside the project folder run:
+```bash
+flutterfire configure
+```
+- Select the **ai-fitness-companion** Firebase project from the list
+- Use spacebar to select **android**, then press Enter
+- This auto-generates `android/app/google-services.json` and `lib/firebase_options.dart`
+
+> If the project doesn't appear in the list, your Google account hasn't been added to Firebase yet — contact the project owner before attempting this step.
+
+---
+
+### 7. Configure API Keys
+A `.env.example` file is included in the project root. Copy it and fill in your key:
+```bash
+copy .env.example .env
+```
+Then open `.env` and replace the placeholder with your actual Gemini API key:
+```
+GEMINI_API_KEY=your_actual_key_here
+```
+> Never commit the `.env` file. It is already listed in `.gitignore`. Contact the project owner if you need the API key value.
+
+---
+
+### 8. Run the App
+Start your emulator first, then verify Flutter can see it:
+```bash
+flutter devices
+```
+Then launch:
+```bash
+flutter run --dart-define-from-file=.env
+```
+The first build takes a few minutes. If the app appears on the emulator you are fully set up.
+
+---
+
+> **Having trouble?** This guide covers the most common setup path but Windows environments vary. For detailed troubleshooting and step-by-step fixes for common errors, see [`SETUP_GUIDE.md`](./SETUP_GUIDE.md) in the repository root.
+
+---
 
 # 🔮 Future Roadmap
 
