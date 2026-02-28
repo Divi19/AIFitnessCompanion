@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/rag_service.dart';
 
@@ -187,15 +188,42 @@ class _ChatBubble extends StatelessWidget {
           ),
           border: isUser ? null : Border.all(color: Colors.white10),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            // Black text on Green bubble, White text on Dark bubble
-            color: isUser ? Colors.black : Colors.white,
-            fontSize: 15,
-            fontWeight: isUser ? FontWeight.w500 : FontWeight.normal,
-          ),
-        ),
+        child: isUser
+            ? Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              )
+            : MarkdownBody(
+                data: text,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p:          const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
+                  h1:         const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, height: 2),
+                  h2:         const TextStyle(color: Color(0xFFFF5E00), fontSize: 16, fontWeight: FontWeight.w700, height: 2),
+                  h3:         const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, height: 1.8),
+                  strong:     const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  em:         const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+                  listBullet: const TextStyle(color: Color(0xFFB9FF2B), fontSize: 15),
+                  code:       const TextStyle(color: Color(0xFFB9FF2B), fontSize: 13, fontFamily: 'monospace'),
+                  codeblockDecoration: BoxDecoration(
+                    color: const Color(0xFF111111),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    color: const Color(0xFFFF5E00).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: const Border(left: BorderSide(color: Color(0xFFFF5E00), width: 3)),
+                  ),
+                  blockquote: const TextStyle(color: Colors.white70, fontSize: 14),
+                  horizontalRuleDecoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.white12, width: 1)),
+                  ),
+                ),
+              ),
       ),
     );
   }
