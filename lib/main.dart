@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'screens/workout_tracker_screen.dart'; // Import the new screen for pose detection and correction
+import 'screens/meal_tracker_screen.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,10 +35,8 @@ class MyApp extends ConsumerWidget {
         useMaterial3: true,
       ),
 
-      // Directly boot into the workout tracker for now.
-      // When your teammates finish the auth/home screen, replace this with
-      // their screen and add a navigation button to WorkoutTrackerScreen from there.
-      home: const WorkoutTrackerScreen(),
+      // Directly boot into the meal tracker for now, to test meal tracker screen
+      home: const MealTrackerScreen()
     );
   }
 }

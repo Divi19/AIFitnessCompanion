@@ -18,9 +18,9 @@ class MealService {
   // UUID generator for creating unique meal log IDs
   final Uuid _uuid = const Uuid();
 
-  // 
+  //
   // BARCODE -> NUTRITION (Open Food Facts)
-  // 
+  //
 
   /// Looks up a product by its barcode using the Open Food Facts API.
   ///
@@ -39,36 +39,81 @@ class MealService {
 
       final response = await http.get(
         url,
-        headers: {
-          // Open Food Facts requests a meaningful User-Agent to identify the app
-          'User-Agent': 'AiFitnessApp/1.0',
-        },
+        headers: {'User-Agent': 'AiFitnessApp/1.0'},
       );
 
       if (response.statusCode != 200) return null;
 
       final data = jsonDecode(response.body);
-
-      // status = 1 means product was found, 0 means not found
       if (data['status'] != 1) return null;
 
       final product = data['product'];
       final nutriments = product['nutriments'] ?? {};
 
-      // Extract the fields we need, defaulting to 0 if missing.
-      // Open Food Facts stores values per 100g by default.
+      // --- Calories ---
+      // Open Food Facts stores calories inconsistently across products.
+      // We try kcal fields first, then fall back to kJ and convert (÷ 4.184).
+      double calories = 0;
+      if (nutriments.containsKey('energy-kcal_100g')) {
+        calories = (nutriments['energy-kcal_100g'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('energy-kcal')) {
+        calories = (nutriments['energy-kcal'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('energy_100g')) {
+        // energy_100g is in kJ — convert to kcal by dividing by 4.184
+        calories = ((nutriments['energy_100g'] ?? 0) / 4.184).toDouble();
+      } else if (nutriments.containsKey('energy')) {
+        calories = ((nutriments['energy'] ?? 0) / 4.184).toDouble();
+      }
+
+      // --- Protein ---
+      // Try both 'proteins' (European naming) and 'protein'
+      double protein = 0;
+      if (nutriments.containsKey('proteins_100g')) {
+        protein = (nutriments['proteins_100g'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('protein_100g')) {
+        protein = (nutriments['protein_100g'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('proteins')) {
+        protein = (nutriments['proteins'] ?? 0).toDouble();
+      }
+
+      // --- Carbs ---
+      double carbs = 0;
+      if (nutriments.containsKey('carbohydrates_100g')) {
+        carbs = (nutriments['carbohydrates_100g'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('carbohydrates')) {
+        carbs = (nutriments['carbohydrates'] ?? 0).toDouble();
+      }
+
+      // --- Fat ---
+      double fat = 0;
+      if (nutriments.containsKey('fat_100g')) {
+        fat = (nutriments['fat_100g'] ?? 0).toDouble();
+      } else if (nutriments.containsKey('fat')) {
+        fat = (nutriments['fat'] ?? 0).toDouble();
+      }
+
+      // --- Serving size ---
+      final servingSize = _parseServingSize(product['serving_size'] ?? '100g');
+
+      // Debug print to confirm correct values are now being read
+      print('=== PARSED NUTRITION ===');
+      print('Name: ${product['product_name']}');
+      print('Calories/100g: $calories');
+      print('Protein/100g: $protein');
+      print('Carbs/100g: $carbs');
+      print('Fat/100g: $fat');
+      print('Serving size: ${servingSize}g');
+
       return {
         'name': product['product_name'] ?? 'Unknown Product',
-        // Per 100g values - we'll adjust for serving size and portion later
-        'calories_per_100g': (nutriments['energy-kcal_100g'] ?? 0).toDouble(),
-        'protein_per_100g': (nutriments['proteins_100g'] ?? 0).toDouble(),
-        'carbs_per_100g': (nutriments['carbohydrates_100g'] ?? 0).toDouble(),
-        'fat_per_100g': (nutriments['fat_100g'] ?? 0).toDouble(),
-        // Serving size in grams if the product provides it
-        'serving_size_g': _parseServingSize(product['serving_size'] ?? '100g'),
+        'calories_per_100g': calories,
+        'protein_per_100g': protein,
+        'carbs_per_100g': carbs,
+        'fat_per_100g': fat,
+        'serving_size_g': servingSize,
       };
     } catch (e) {
-      // Network error or malformed JSON - return null so UI can handle it
+      print('=== FETCH ERROR: $e ===');
       return null;
     }
   }
