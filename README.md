@@ -120,3 +120,61 @@ All confirmed entries are saved to Firebase Firestore under the user's account.
 | **Google Cloud Vertex AI** | Enterprise AI infrastructure backing Firebase AI Logic for scalable model inference |
 | **Google Cloud Run** | Serverless platform for any server-side processing beyond Firebase native capabilities |
 | **Android Studio** | Primary IDE with Flutter tooling, built-in emulator, and performance profiling |
+
+# 🔮 Future Roadmap
+
+## 🚀 Short Term (0–6 Months)
+
+- Structured user testing to validate success metrics:
+  - Meal logging speed  
+  - Form correction accuracy  
+  - Daily engagement retention  
+
+- Expand pose tracking beyond 3 core exercises to include:
+  - Yoga  
+  - Stretching  
+  - Mobility routines  
+
+- Improve Gemini meal recognition to cover more granular Malaysian dishes:
+  - Distinguish roti canai, roti telur, roti sardin  
+  - Improve macro estimation accuracy  
+
+- Introduce home screen widgets for:
+  - Daily goal visibility  
+  - Streak reminders  
+
+- Official launch on both Android and iOS platforms  
+
+---
+
+## 📈 Medium Term (6–12 Months)
+
+- Establish university and corporate wellness partnerships for bulk user acquisition  
+
+- Launch streak-based reward system:
+  - Food vendor sponsorships  
+  - Healthy lifestyle incentives  
+
+- Expand RAG knowledge base:
+  - Continuous ingestion of fitness and nutrition research  
+  - Firecrawl-powered web scraping  
+  - Automated embedding updates  
+
+- Pursue government grants and public health funding to sustain free access as infrastructure scales  
+
+---
+
+## 🌏 Long Term (12+ Months)
+
+- Strategic partnerships with government health bodies for national preventive health campaigns  
+
+- Multilingual support and Southeast Asian cuisine expansion  
+
+- Offline mode for rural and low-connectivity communities  
+
+- Develop proprietary affordable smart hardware ecosystem:
+  - Smart watch  
+  - Smart ring  
+  - Smart weighing scale  
+
+  These devices will integrate directly with the FitAI app and serve as the primary revenue stream, keeping the core application permanently free and accessible.
