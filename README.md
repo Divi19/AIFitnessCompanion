@@ -1,5 +1,7 @@
 # 📋 Project Overview
 
+# FitSense - The AI-powered preventive health companion designed to combat Malaysia’s rising lifestyle-related health crisis.
+
 ## 🚨 Problem Statement
 
 Urban Malaysia is facing a growing health crisis driven by sedentary lifestyles and poor health behaviour sustainability. According to the **National Health and Morbidity Survey 2023**:
@@ -28,7 +30,7 @@ Our solution provides free, AI-powered preventive health guidance that was previ
 
 # 💡 Solution
 
-**FitAI** is a free, all-in-one AI-powered mobile health companion built with **Flutter**.
+**FitSense** is a free, all-in-one AI-powered mobile health companion built with **Flutter**.
 
 Instead of juggling multiple paid apps, users get everything they need in one place:
 
