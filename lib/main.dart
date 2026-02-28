@@ -118,7 +118,7 @@ class HomeScreen extends StatelessWidget {
               Text(
                 'Welcome back',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
               Text(
                 user?.email ?? '',
@@ -157,6 +157,7 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
+              // FEATURE 2: Workout Tracker (Orange)
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -179,24 +180,35 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 16),
 
-              // Admin Route (Subtle)
+              // FEATURE 3: Injury Profile / Plan Routine (Dark Surface)
+              ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
                     builder: (_) => const InjuryProfileScreen(),
                   ),
                 ),
-                icon: const Icon(Icons.fitness_center),
-                label: const Text('Plan My Routine'),
+                icon: const Icon(Icons.assignment),
+                label: const Text(
+                  'Plan My Routine',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple[300],
+                  backgroundColor: const Color(0xFF1A1A1A), // Dark surface color
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Colors.white10), // Subtle outline
                   ),
                 ),
               ),
-              // Admin — subtle, not prominent for demo users
+
+              const SizedBox(height: 40),
+
+              // Admin Route (Subtle)
               TextButton(
                 onPressed: () => Navigator.push(
                   context,
