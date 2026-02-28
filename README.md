@@ -1,6 +1,6 @@
-# 📋 Project Overview
+# 📋 Project Overview - FitSense
 
-# FitSense - The AI-powered preventive health companion designed to combat Malaysia’s rising lifestyle-related health crisis.
+# The AI-powered preventive health companion designed to combat Malaysia’s rising lifestyle-related health crisis.
 
 ## 🚨 Problem Statement
 
