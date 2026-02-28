@@ -55,7 +55,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   List<MealModel> _todaysLogs = []; // Today's logged entries from Firestore
 
 
-  final String _userId = FirebaseAuth.instance.currentUser?.uid;
+  final String _userId =FirebaseAuth.instance.currentUser?.uid ?? 'demo_user';
 
   // Lifecycle
 
@@ -132,74 +132,93 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
   /// Called by MobileScanner when a barcode is detected.
   /// Fetches product nutrition from Open Food Facts.
-  Future<void> _onBarcodeDetected(BarcodeCapture capture) async {
-    // Take only the first barcode if multiple are detected simultaneously
-    if (capture.barcodes.isEmpty) return;
-    final barcode = capture.barcodes.first.rawValue;
-    if (barcode == null) return;
+  bool _scanLock = false; 
 
-    // Stop scanning so the camera doesn't keep firing callbacks
-    _scannerController.stop();
+Future<void> _onBarcodeDetected(BarcodeCapture capture) async {
+  // Hard lock — ignore ALL callbacks until this scan is fully complete
+  if (_scanLock) return;
+  if (capture.barcodes.isEmpty) return;
+  final barcode = capture.barcodes.first.rawValue;
+  if (barcode == null) return;
 
-    setState(() {
-      _isScanning = false;
-      _isFetchingProduct = true;
-      _scannedProduct = null;
-      _portionFactor = 1.0; // Reset portion to full for each new scan
-    });
+  _scanLock = true; // Lock immediately before any async work
+  _scannerController.stop();
 
-    // Look up the barcode in Open Food Facts
-    final product = await _mealService.fetchProductByBarcode(barcode);
+  setState(() {
+    _isScanning = false;
+    _isFetchingProduct = true;
+    _scannedProduct = null;
+    _portionFactor = 1.0;
+  });
 
-    setState(() {
-      _isFetchingProduct = false;
-      _scannedProduct = product;
-    });
+  final product = await _mealService.fetchProductByBarcode(barcode);
 
-    // If product wasn't found, show an error and let the user scan again
-    if (product == null) {
-      _showErrorSnackbar('Product not found. Try scanning again.');
-      _resetScanner();
-    }
-  }
+  setState(() {
+    _isFetchingProduct = false;
+    _scannedProduct = product;
+  });
 
-  /// Called when the user confirms the snack log.
-  /// Applies the portion factor to the nutrition values before logging.
-  Future<void> _confirmSnack() async {
-    if (_scannedProduct == null) return;
-
-    // Calculate actual consumed nutrition using the user's portion selection
-    final nutrition = _mealService.calculateNutrition(
-      productData: _scannedProduct!,
-      portionFactor: _portionFactor,
-    );
-
-    await _mealService.logMeal(
-      userId: _userId,
-      name: _scannedProduct!['name'],
-      type: 'snack',
-      calories: nutrition['calories']!,
-      protein: nutrition['protein']!,
-      carbs: nutrition['carbs']!,
-      fat: nutrition['fat']!,
-      portion: _portionFactor,
-    );
-
+  if (product == null) {
+    _showErrorSnackbar('Product not found or incomplete data. Try another product.');
     _resetScanner();
-    await _loadTodaysLogs();
-    _showSuccessSnackbar('${_scannedProduct!['name']} logged!');
   }
 
-  /// Resets the snack scan tab back to the scanning state.
-  void _resetScanner() {
-    setState(() {
-      _isScanning = true;
-      _scannedProduct = null;
-      _portionFactor = 1.0;
-    });
-    _scannerController.start();
-  }
+  // Don't release lock here — it stays locked until user taps Scan Again
+}
 
+ /// Called when the user confirms the snack log.
+/// Applies the portion factor to the nutrition values before logging.
+Future<void> _confirmSnack() async {
+  if (_scannedProduct == null) return;
+
+  // Save the name BEFORE resetting so the snackbar can still use it
+  final productName = _scannedProduct!['name'] as String;
+
+  // Calculate actual consumed nutrition using the user's portion selection
+  final nutrition = _mealService.calculateNutrition(
+    productData:   _scannedProduct!,
+    portionFactor: _portionFactor,
+  );
+
+  await _mealService.logMeal(
+    userId:   _userId,
+    name:     productName,
+    type:     'snack',
+    calories: nutrition['calories']!,
+    protein:  nutrition['protein']!,
+    carbs:    nutrition['carbs']!,
+    fat:      nutrition['fat']!,
+    portion:  _portionFactor,
+  );
+
+  // Reset AFTER saving the name, not before
+  _resetScanner();
+  await _loadTodaysLogs();
+
+  // Use saved name instead of _scannedProduct which is now null
+  _showSuccessSnackbar('$productName logged!');
+}
+
+/// Resets the snack scan tab fully back to scanning state.
+/// Also releases the scan lock so the next product can be scanned.
+void _resetScanner() {
+  // Stop the scanner first to avoid callbacks during state reset
+  _scannerController.stop();
+
+  setState(() {
+    _isScanning      = true;
+    _scannedProduct  = null;
+    _portionFactor   = 1.0;
+    _scanLock        = false; // 
+  });
+
+  // Restart scanner AFTER state is updated
+  // Small delay prevents the scanner from immediately re-detecting
+  // the same barcode that was just processed
+  Future.delayed(const Duration(milliseconds: 500), () {
+    if (mounted) _scannerController.start();
+  });
+}
   // 
   // SHARED HELPERS
   // 

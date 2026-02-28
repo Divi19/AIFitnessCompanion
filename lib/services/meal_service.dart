@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../models/meal_model.dart';
+import 'dart:async';
 
 /// Service that handles two responsibilities:
 ///   1. Fetching nutrition data from Open Food Facts using a barcode
@@ -31,23 +32,51 @@ class MealService {
   ///
   /// The Open Food Facts API endpoint format:
   /// https://world.openfoodfacts.org/api/v0/product/{barcode}.json
-  Future<Map<String, dynamic>?> fetchProductByBarcode(String barcode) async {
+Future<Map<String, dynamic>?> fetchProductByBarcode(String barcode) async {
+  // Try up to 2 times in case of transient network issues
+  for (int attempt = 1; attempt <= 2; attempt++) {
     try {
+      print('=== FETCH ATTEMPT $attempt for barcode: $barcode ===');
+
+      // v2 API with fields filter — faster and more stable than v0
+      // Only requesting the fields we actually need reduces response size
       final url = Uri.parse(
-        'https://world.openfoodfacts.org/api/v0/product/$barcode.json',
+        'https://world.openfoodfacts.org/api/v2/product/$barcode?fields=product_name,nutriments,serving_size,serving_quantity',
       );
 
       final response = await http.get(
         url,
-        headers: {'User-Agent': 'AiFitnessApp/1.0'},
+        headers: {
+          // Open Food Facts requires a descriptive User-Agent
+          // or requests get throttled/blocked
+          'User-Agent': 'AiFitnessApp - Flutter - Hackathon - dev@example.com',
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('=== TIMEOUT on attempt $attempt ===');
+          throw Exception('Request timed out');
+        },
       );
 
-      if (response.statusCode != 200) return null;
+      print('=== HTTP STATUS: ${response.statusCode} ===');
+
+      if (response.statusCode != 200) {
+        print('=== HTTP ERROR: ${response.statusCode} ===');
+        continue; // Try again on next attempt
+      }
 
       final data = jsonDecode(response.body);
-      if (data['status'] != 1) return null;
 
-      final product = data['product'];
+      // status = 1 means product was found, 0 means not in database
+      if (data['status'] != 1) {
+        print('=== PRODUCT NOT IN DATABASE ===');
+        return null; // No point retrying — product genuinely not found
+      }
+
+      final product    = data['product'];
       final nutriments = product['nutriments'] ?? {};
 
       // --- Calories ---
@@ -93,30 +122,46 @@ class MealService {
       }
 
       // --- Serving size ---
-      final servingSize = _parseServingSize(product['serving_size'] ?? '100g');
+      // Prefer 'serving_quantity' (already a number in grams) over
+      // parsing the 'serving_size' string which can be inconsistent
+      double servingG = 100.0;
+      if (product['serving_quantity'] != null) {
+        servingG = (product['serving_quantity'] is String)
+            ? double.tryParse(product['serving_quantity']) ?? 100.0
+            : (product['serving_quantity'] as num).toDouble();
+      } else {
+        servingG = _parseServingSize(product['serving_size'] ?? '100g');
+      }
 
-      // Debug print to confirm correct values are now being read
-      print('=== PARSED NUTRITION ===');
-      print('Name: ${product['product_name']}');
-      print('Calories/100g: $calories');
-      print('Protein/100g: $protein');
-      print('Carbs/100g: $carbs');
-      print('Fat/100g: $fat');
-      print('Serving size: ${servingSize}g');
+      // If all core nutrition fields are zero the database entry
+      // is incomplete — return null so UI shows a helpful message
+      if (calories == 0 && protein == 0 && carbs == 0 && fat == 0) {
+        print('=== INCOMPLETE DATA for ${product['product_name']} ===');
+        return null;
+      }
+
+      // Success — log the parsed values for verification
+      print('=== SUCCESS: ${product['product_name']} ===');
+      print('Cal: $calories | P: $protein | C: $carbs | F: $fat | Serving: ${servingG}g');
 
       return {
-        'name': product['product_name'] ?? 'Unknown Product',
+        'name':              product['product_name'] ?? 'Unknown Product',
         'calories_per_100g': calories,
-        'protein_per_100g': protein,
-        'carbs_per_100g': carbs,
-        'fat_per_100g': fat,
-        'serving_size_g': servingSize,
+        'protein_per_100g':  protein,
+        'carbs_per_100g':    carbs,
+        'fat_per_100g':      fat,
+        'serving_size_g':    servingG,
       };
+
     } catch (e) {
-      print('=== FETCH ERROR: $e ===');
-      return null;
+      print('=== FETCH ERROR attempt $attempt: $e ===');
+      if (attempt == 2) return null; // Both attempts failed — give up
+      // Wait 1 second before retrying to give network time to recover
+      await Future.delayed(const Duration(seconds: 1));
     }
   }
+  return null;
+}
 
   /// Parses a serving size string like "30g" or "250 ml" into a double.
   /// Falls back to 100g if the format is unrecognised.
