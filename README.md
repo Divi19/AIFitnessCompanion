@@ -100,3 +100,23 @@ All confirmed entries are saved to Firebase Firestore under the user's account.
 - Persistent weight goal reminder  
 - Daily exercise to-do list  
 - Streak tracking to sustain long-term motivation  
+
+# 🛠️ Technologies Used
+
+## 🚀 Google Technologies
+
+| Technology | Purpose |
+|------------|----------|
+| **Flutter** | Cross-platform mobile UI framework — single codebase for Android and iOS |
+| **Firebase Authentication** | Secure user sign-in and session management; links all user data via a single UID |
+| **Firebase Cloud Firestore** | Primary NoSQL database — stores user profiles, meal logs, workout history, and RAG vector embeddings with built-in vector similarity search |
+| **Firebase AI Logic** | Hosts Gemini 2.0 Flash for the health chatbot, backed by Google Cloud Vertex AI |
+| **Firebase Analytics** | Tracks feature engagement, session duration, and retention post-deployment |
+| **Gemini 2.5 Flash** | Generates personalised injury-aware workout plans via direct HTTP REST calls |
+| **Gemini 2.5 Flash Lite** | Multimodal vision model for meal photo classification — returns top 3 dish suggestions with estimated macros |
+| **Gemini 2.0 Flash** | Generates grounded, personalised health chatbot responses via Firebase AI Logic |
+| **Gemini Embedding API (gemini-embedding-001)** | Converts knowledge chunks and user queries into 768-dimensional vectors for semantic similarity search in the RAG pipeline |
+| **Google ML Kit Pose Detection (MediaPipe)** | On-device real-time pose estimation — detects 33 body landmarks per camera frame with no server calls required |
+| **Google Cloud Vertex AI** | Enterprise AI infrastructure backing Firebase AI Logic for scalable model inference |
+| **Google Cloud Run** | Serverless platform for any server-side processing beyond Firebase native capabilities |
+| **Android Studio** | Primary IDE with Flutter tooling, built-in emulator, and performance profiling |
