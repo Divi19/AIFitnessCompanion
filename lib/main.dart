@@ -143,7 +143,6 @@ class HomeDashboardTab extends StatefulWidget {
 }
 
 class _HomeDashboardTabState extends State<HomeDashboardTab> {
-  // State variables moved to the class level so the analyzer knows they can change!
   bool step1 = false;
   bool step2 = false;
 
@@ -180,6 +179,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           double calorieProgress = currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
           if (calorieProgress > 1.0) calorieProgress = 1.0;
 
+          // Determine color for fatigue based on severity
+          final fatigueColor = fatigue > 7 ? const Color(0xFFFF5E00) : const Color(0xFFB9FF2B);
+
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: Column(
@@ -189,11 +191,11 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 Center(
                   child: Column(
                     children: [
-                      Text(
+                      const Text(
                         'welcome back,',
                         style: TextStyle(
                           fontSize: 18, 
-                          color: const Color(0xFFB9FF2B).withOpacity(0.8),
+                          color: Color(0xFFB9FF2B), // Brightened to solid Volt Green
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.2,
@@ -209,24 +211,36 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 
                 const SizedBox(height: 32),
 
-                // 2. Weight Goal Card
+                // 2. Weight Goal Card (Now with Neon Glow)
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A), 
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.3), width: 2), 
+                    border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.5), width: 2), // Brighter border
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFB9FF2B).withOpacity(0.15), // Neon glow effect
+                        blurRadius: 30,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
                   child: Column(
                     children: [
                       Text(
                         targetWeightStr,
-                        style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold, color: Colors.white, height: 1),
+                        style: const TextStyle(
+                          fontSize: 42, 
+                          fontWeight: FontWeight.bold, 
+                          color: Color(0xFFB9FF2B), // Popping Volt Green
+                          height: 1
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'current weight: $currentWeightStr',
-                        style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontSize: 16, color: Colors.white70, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -237,7 +251,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 // 3. Today's Exercise Checklist
                 const Text(
                   "Today's Exercise:",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFB9FF2B)), // Color-coded title
                 ),
                 const SizedBox(height: 12),
                 
@@ -245,7 +259,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: Colors.white24), // Slightly more visible border
                   ),
                   child: Column(
                     children: [
@@ -253,10 +267,10 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: Text(
                           'hit 10k steps', 
                           style: TextStyle(
-                            color: Colors.white, 
+                            color: step1 ? Colors.white38 : Colors.white, // Dims when checked
                             fontWeight: FontWeight.bold,
                             decoration: step1 ? TextDecoration.lineThrough : null,
-                            decorationColor: Colors.grey,
+                            decorationColor: const Color(0xFFFF5E00), // Orange strikethrough
                           )
                         ),
                         value: step1,
@@ -271,10 +285,10 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: Text(
                           'HIIT workout', 
                           style: TextStyle(
-                            color: Colors.white, 
+                            color: step2 ? Colors.white38 : Colors.white, // Dims when checked
                             fontWeight: FontWeight.bold,
                             decoration: step2 ? TextDecoration.lineThrough : null,
-                            decorationColor: Colors.grey,
+                            decorationColor: const Color(0xFFFF5E00), // Orange strikethrough
                           )
                         ),
                         value: step2,
@@ -293,7 +307,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 // 4. Calories Progress Bar
                 const Text(
                   "Calories Intake:",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFF5E00)), // Color-coded title
                 ),
                 const SizedBox(height: 16),
                 
@@ -302,7 +316,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   child: LinearProgressIndicator(
                     value: calorieProgress,
                     minHeight: 24,
-                    backgroundColor: const Color(0xFF1A1A1A),
+                    backgroundColor: const Color(0xFFB9FF2B).withOpacity(0.15), // Translucent green track
                     valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFB9FF2B)), 
                   ),
                 ),
@@ -310,7 +324,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Intake: $currentIntake kcal', style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Text('Intake: $currentIntake kcal', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
                     Text('Goal: $recommendedCalories kcal', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -319,7 +333,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 24),
 
-                // 5. Existing Vitals Row 
+                // 5. Existing Vitals Row (Now fully colored)
                 Row(
                   children: [
                     Expanded(
@@ -327,8 +341,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: 'Day Streak',
                         value: '$streak',
                         icon: Icons.local_fire_department,
-                        bgColor: const Color(0xFF1A1A1A), 
-                        textColor: Colors.white,
+                        bgColor: const Color(0xFFFF5E00).withOpacity(0.15), // Tinted Orange Background
+                        textColor: const Color(0xFFFF5E00), // Orange Text
                         borderColor: const Color(0xFFFF5E00).withOpacity(0.5),
                       ),
                     ),
@@ -338,9 +352,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         title: 'Fatigue',
                         value: '$fatigue/10',
                         icon: Icons.battery_charging_full,
-                        bgColor: const Color(0xFF1A1A1A), 
-                        textColor: Colors.white,
-                        borderColor: Colors.white10,
+                        bgColor: fatigueColor.withOpacity(0.15), // Tinted Dynamic Background
+                        textColor: fatigueColor, // Dynamic Text (Green or Orange)
+                        borderColor: fatigueColor.withOpacity(0.5),
                       ),
                     ),
                   ],
@@ -360,7 +374,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF5E00).withOpacity(0.2),
+                        color: const Color(0xFFFF5E00).withOpacity(0.3), // Slightly boosted glow
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -431,7 +445,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor.withOpacity(0.7)),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor.withOpacity(0.8)), // Slightly brighter title
           ),
         ],
       ),
