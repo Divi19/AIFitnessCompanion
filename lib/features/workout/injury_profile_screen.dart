@@ -298,7 +298,7 @@ Strict Rules:
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final plan = data['candidates']['content']['parts']['text'];
+        final plan = data['candidates'][0]['content']['parts'][0]['text'] as String;
         if (mounted) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => WorkoutPlanScreen(plan: plan)));
         }
@@ -723,7 +723,7 @@ Strict Rules:
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(isLast ? 'Generate My Plan 🚀' : 'Continue',
+                    Text(isLast ? 'Proceed' : 'Continue',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
                     if (!isLast) ...[const SizedBox(width: 8), const Icon(Icons.arrow_forward, color: Colors.white, size: 18)],
                   ],
@@ -810,7 +810,7 @@ Strict Rules:
             child: Text(title, style: const TextStyle(color: Color(0xFFFF5E00), fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
           ),
           const Divider(color: Colors.white12, height: 1),
-          ...items.map((item) => _checkRow(item as String, item as bool, item as Function(bool?))),
+          ...items.map((item) => _checkRow(item[0] as String, item[1] as bool, item[2] as Function(bool?))),
         ],
       ),
     );
