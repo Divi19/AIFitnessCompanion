@@ -164,6 +164,64 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
   bool step1 = false;
   bool step2 = false;
 
+  // NEW: Function to show dialog and update fatigue score in Firestore
+  Future<void> _updateFatigue(BuildContext context, String uid, int currentFatigue) async {
+    int? newFatigue = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        int tempFatigue = currentFatigue;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Set Fatigue Level', style: TextStyle(color: Colors.white)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Slider(
+                    value: tempFatigue.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    activeColor: const Color(0xFFB9FF2B),
+                    inactiveColor: Colors.white24,
+                    label: tempFatigue.toString(),
+                    onChanged: (val) {
+                      setState(() {
+                        tempFatigue = val.toInt();
+                      });
+                    },
+                  ),
+                  Text(
+                    'Level: $tempFatigue/10',
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, tempFatigue),
+                  child: const Text('Save', style: TextStyle(color: Color(0xFFB9FF2B), fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (newFatigue != null && newFatigue != currentFatigue) {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'fatigue_score': newFatigue,
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -520,11 +578,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         Expanded(
                           child: _buildVitalCard(
                             title: 'Fatigue',
+                            subtitle: 'Tap to update', // ADDED EXPLICIT INSTRUCTION
                             value: '$fatigue/10',
                             icon: Icons.battery_charging_full,
                             bgColor: fatigueColor.withOpacity(0.15),
                             textColor: fatigueColor,
                             borderColor: fatigueColor.withOpacity(0.5),
+                            onTap: () => _updateFatigue(context, uid, fatigue is int ? fatigue : (fatigue as num).toInt()), // ADDED ONTAP ACTION
                           ),
                         ),
                       ],
@@ -541,6 +601,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
     );
   }
 
+  // ADDED ONTAP OPTION & SUBTITLE TO HELPER
   Widget _buildVitalCard({
     required String title,
     required String value,
@@ -548,35 +609,50 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
     required Color bgColor,
     required Color textColor,
     Color? borderColor,
+    VoidCallback? onTap,
+    String? subtitle,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor ?? Colors.transparent),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: textColor, size: 24),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: textColor),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: textColor.withOpacity(0.8)),
-          ),
-        ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor ?? Colors.transparent),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: textColor, size: 24),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: textColor),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: textColor.withOpacity(0.8)),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: textColor.withOpacity(0.6)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
