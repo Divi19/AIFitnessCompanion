@@ -171,15 +171,15 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
             .collection('users')
             .doc(uid)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+        builder: (context, userSnapshot) {
+          if (!userSnapshot.hasData) {
             return const Center(
                 child: CircularProgressIndicator(
                     color: Color(0xFFB9FF2B)));
           }
 
           final data =
-              snapshot.data!.data() as Map<String, dynamic>? ?? {};
+              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
           final name = data['name'] ?? 'Athlete';
           final streak = data['current_streak'] ?? 0;
           final fatigue = data['fatigue_score'] ?? 5;
@@ -201,311 +201,337 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
           final recommendedCalories =
               healthInsights['suggested_calories'] ?? 2000;
-          const int currentIntake = 1200;
-
-          double calorieProgress =
-              currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
-          if (calorieProgress > 1.0) calorieProgress = 1.0;
 
           final fatigueColor = fatigue > 7
               ? const Color(0xFFFF5E00)
               : const Color(0xFFB9FF2B);
 
-          return SingleChildScrollView(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Greeting
-                Center(
-                  child: Column(
-                    children: [
-                      const Text(
-                        'welcome back,',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Color(0xFFB9FF2B),
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      Text(
-                        name.toString().split(' ').first,
-                        style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
+          // Get the start of today for our meal query
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
 
-                const SizedBox(height: 32),
+          // SECOND STREAM: Fetching today's consumed meals dynamically
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('meals')
+                .doc(uid)
+                .collection('logs')
+                .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(today))
+                .snapshots(),
+            builder: (context, mealSnapshot) {
+              
+              // Calculate dynamic intake from the snapshot
+              double totalCaloriesDouble = 0;
+              if (mealSnapshot.hasData) {
+                for (var doc in mealSnapshot.data!.docs) {
+                  final mealData = doc.data() as Map<String, dynamic>;
+                  totalCaloriesDouble += (mealData['calories'] as num?)?.toDouble() ?? 0.0;
+                }
+              }
+              final int currentIntake = totalCaloriesDouble.round();
 
-                // Weight Goal Card
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 24, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.5),
-                        width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.15),
-                        blurRadius: 30,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        targetWeightStr,
-                        style: const TextStyle(
-                            fontSize: 42,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFB9FF2B),
-                            height: 1),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'current weight: $currentWeightStr',
-                        style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
+              // Calculate progress bar logic
+              double calorieProgress =
+                  currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
+              if (calorieProgress > 1.0) calorieProgress = 1.0;
 
-                const SizedBox(height: 32),
-
-                // Today's Exercise Checklist
-                const Text(
-                  "Today's Exercise:",
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFB9FF2B)),
-                ),
-                const SizedBox(height: 12),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    children: [
-                      CheckboxListTile(
-                        title: Text('hit 10k steps',
-                            style: TextStyle(
-                              color: step1
-                                  ? Colors.white38
-                                  : Colors.white,
-                              fontWeight: FontWeight.bold,
-                              decoration: step1
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                              decorationColor:
-                                  const Color(0xFFFF5E00),
-                            )),
-                        value: step1,
-                        onChanged: (val) =>
-                            setState(() => step1 = val!),
-                        activeColor: const Color(0xFFFF5E00),
-                        checkColor: Colors.white,
-                        controlAffinity:
-                            ListTileControlAffinity.leading,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      const Divider(height: 1, color: Colors.white10),
-                      CheckboxListTile(
-                        title: Text('HIIT workout',
-                            style: TextStyle(
-                              color: step2
-                                  ? Colors.white38
-                                  : Colors.white,
-                              fontWeight: FontWeight.bold,
-                              decoration: step2
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                              decorationColor:
-                                  const Color(0xFFFF5E00),
-                            )),
-                        value: step2,
-                        onChanged: (val) =>
-                            setState(() => step2 = val!),
-                        activeColor: const Color(0xFFFF5E00),
-                        checkColor: Colors.white,
-                        controlAffinity:
-                            ListTileControlAffinity.leading,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Calories Progress Bar
-                const Text(
-                  "Calories Intake:",
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFFF5E00)),
-                ),
-                const SizedBox(height: 16),
-
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: LinearProgressIndicator(
-                    value: calorieProgress,
-                    minHeight: 24,
-                    backgroundColor:
-                        const Color(0xFFB9FF2B).withOpacity(0.15),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFFB9FF2B)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              return SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Intake: $currentIntake kcal',
-                        style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold)),
-                    Text('Goal: $recommendedCalories kcal',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold)),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-                
-                // NEW SCAN MEAL BUTTON ADDED HERE
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MealTrackerScreen()),
-                  ),
-                  icon: const Icon(Icons.camera_alt, size: 20),
-                  label: const Text('Scan a Meal', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A), // Dark surface
-                    foregroundColor: const Color(0xFFFF5E00), // Electric Orange
-                    side: BorderSide(color: const Color(0xFFFF5E00).withOpacity(0.5)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-                const Divider(color: Colors.white10),
-                const SizedBox(height: 24),
-
-                // Vitals Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildVitalCard(
-                        title: 'Day Streak',
-                        value: '$streak',
-                        icon: Icons.local_fire_department,
-                        bgColor:
-                            const Color(0xFFFF5E00).withOpacity(0.15),
-                        textColor: const Color(0xFFFF5E00),
-                        borderColor:
-                            const Color(0xFFFF5E00).withOpacity(0.5),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildVitalCard(
-                        title: 'Fatigue',
-                        value: '$fatigue/10',
-                        icon: Icons.battery_charging_full,
-                        bgColor: fatigueColor.withOpacity(0.15),
-                        textColor: fatigueColor,
-                        borderColor: fatigueColor.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Generate Routine Button
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFFFF5E00),
-                        const Color(0xFFFF5E00).withOpacity(0.8)
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF5E00).withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                const WorkoutBuilderScreen()),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                            vertical: 24, horizontal: 24),
-                        child: Column(
-                          children: [
-                            Icon(Icons.bolt,
-                                size: 36, color: Colors.white),
-                            SizedBox(height: 12),
-                            Text(
-                              'Generate Routine',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                    // Greeting
+                    Center(
+                      child: Column(
+                        children: [
+                          const Text(
+                            'welcome back,',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Color(0xFFB9FF2B),
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
                             ),
+                          ),
+                          Text(
+                            name.toString().split(' ').first,
+                            style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Weight Goal Card
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 24, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                            width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFB9FF2B).withOpacity(0.15),
+                            blurRadius: 30,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            targetWeightStr,
+                            style: const TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFB9FF2B),
+                                height: 1),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'current weight: $currentWeightStr',
+                            style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Today's Exercise Checklist
+                    const Text(
+                      "Today's Exercise:",
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFB9FF2B)),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Column(
+                        children: [
+                          CheckboxListTile(
+                            title: Text('hit 10k steps',
+                                style: TextStyle(
+                                  color: step1
+                                      ? Colors.white38
+                                      : Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: step1
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  decorationColor:
+                                      const Color(0xFFFF5E00),
+                                )),
+                            value: step1,
+                            onChanged: (val) =>
+                                setState(() => step1 = val!),
+                            activeColor: const Color(0xFFFF5E00),
+                            checkColor: Colors.white,
+                            controlAffinity:
+                                ListTileControlAffinity.leading,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          const Divider(height: 1, color: Colors.white10),
+                          CheckboxListTile(
+                            title: Text('HIIT workout',
+                                style: TextStyle(
+                                  color: step2
+                                      ? Colors.white38
+                                      : Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: step2
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  decorationColor:
+                                      const Color(0xFFFF5E00),
+                                )),
+                            value: step2,
+                            onChanged: (val) =>
+                                setState(() => step2 = val!),
+                            activeColor: const Color(0xFFFF5E00),
+                            checkColor: Colors.white,
+                            controlAffinity:
+                                ListTileControlAffinity.leading,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Calories Progress Bar
+                    const Text(
+                      "Calories Intake:",
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFF5E00)),
+                    ),
+                    const SizedBox(height: 16),
+
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: LinearProgressIndicator(
+                        value: calorieProgress,
+                        minHeight: 24,
+                        backgroundColor:
+                            const Color(0xFFB9FF2B).withOpacity(0.15),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFFB9FF2B)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Intake: $currentIntake kcal',
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold)),
+                        Text('Goal: $recommendedCalories kcal',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+                    
+                    // SCAN MEAL BUTTON
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const MealTrackerScreen()),
+                      ),
+                      icon: const Icon(Icons.camera_alt, size: 20),
+                      label: const Text('Scan a Meal', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A1A1A), 
+                        foregroundColor: const Color(0xFFFF5E00), 
+                        side: BorderSide(color: const Color(0xFFFF5E00).withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 24),
+
+                    // Vitals Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildVitalCard(
+                            title: 'Day Streak',
+                            value: '$streak',
+                            icon: Icons.local_fire_department,
+                            bgColor:
+                                const Color(0xFFFF5E00).withOpacity(0.15),
+                            textColor: const Color(0xFFFF5E00),
+                            borderColor:
+                                const Color(0xFFFF5E00).withOpacity(0.5),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildVitalCard(
+                            title: 'Fatigue',
+                            value: '$fatigue/10',
+                            icon: Icons.battery_charging_full,
+                            bgColor: fatigueColor.withOpacity(0.15),
+                            textColor: fatigueColor,
+                            borderColor: fatigueColor.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Generate Routine Button
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFFF5E00),
+                            const Color(0xFFFF5E00).withOpacity(0.8)
                           ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF5E00).withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const WorkoutBuilderScreen()),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                vertical: 24, horizontal: 24),
+                            child: Column(
+                              children: [
+                                Icon(Icons.bolt,
+                                    size: 36, color: Colors.white),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Generate Routine',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-                const SizedBox(height: 20),
-              ],
-            ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              );
+            }
           );
         },
       ),
