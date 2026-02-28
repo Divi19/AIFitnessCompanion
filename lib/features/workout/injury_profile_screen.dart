@@ -262,7 +262,7 @@ Strict Rules:
       print('ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red[700]),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -279,9 +279,9 @@ Strict Rules:
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: const Color(0xFF0D0D0D), // Deep Black
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: _currentStep > 0
             ? IconButton(
@@ -334,7 +334,7 @@ Strict Rules:
                     duration: const Duration(milliseconds: 300),
                     height: 3,
                     decoration: BoxDecoration(
-                      color: isDone || isActive ? const Color(0xFF4F8EF7) : Colors.white12,
+                      color: isDone || isActive ? const Color(0xFFFF5E00) : Colors.white12, // Electric Orange
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -343,7 +343,7 @@ Strict Rules:
                     _stepLabels[i],
                     style: TextStyle(
                       fontSize: 10,
-                      color: isActive ? const Color(0xFF4F8EF7) : isDone ? Colors.white54 : Colors.white24,
+                      color: isActive ? const Color(0xFFFF5E00) : isDone ? Colors.white54 : Colors.white24,
                       fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
                     ),
                   ),
@@ -381,9 +381,9 @@ Strict Rules:
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
-                        color: sel ? const Color(0xFF4F8EF7) : const Color(0xFF151929),
+                        color: sel ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A), // Electric Orange / Dark Surface
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: sel ? const Color(0xFF4F8EF7) : Colors.white12),
+                        border: Border.all(color: sel ? const Color(0xFFFF5E00) : Colors.white12),
                       ),
                       child: Text(g,
                           textAlign: TextAlign.center,
@@ -451,15 +451,15 @@ Strict Rules:
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: sel ? const Color(0xFF4F8EF7).withOpacity(0.15) : const Color(0xFF151929),
+                      color: sel ? const Color(0xFFFF5E00).withOpacity(0.15) : const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: sel ? const Color(0xFF4F8EF7) : Colors.white12, width: sel ? 2 : 1),
+                      border: Border.all(color: sel ? const Color(0xFFFF5E00) : Colors.white12, width: sel ? 2 : 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(g['icon'] as IconData, color: sel ? const Color(0xFF4F8EF7) : Colors.white38, size: 26),
+                        Icon(g['icon'] as IconData, color: sel ? const Color(0xFFFF5E00) : Colors.white38, size: 26),
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(g['label'] as String, style: TextStyle(color: sel ? Colors.white : Colors.white70, fontWeight: FontWeight.w700, fontSize: 13)),
                           Text(g['desc'] as String, style: const TextStyle(color: Colors.white38, fontSize: 11)),
@@ -506,9 +506,9 @@ Strict Rules:
                     duration: const Duration(milliseconds: 200),
                     width: 40, height: 40,
                     decoration: BoxDecoration(
-                      color: sel ? const Color(0xFF4F8EF7) : const Color(0xFF151929),
+                      color: sel ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: sel ? const Color(0xFF4F8EF7) : Colors.white12),
+                      border: Border.all(color: sel ? const Color(0xFFFF5E00) : Colors.white12),
                     ),
                     child: Center(child: Text('$day', style: TextStyle(color: sel ? Colors.white : Colors.white54, fontWeight: FontWeight.w700, fontSize: 16))),
                   ),
@@ -516,7 +516,7 @@ Strict Rules:
               }),
             ),
             const SizedBox(height: 8),
-            Center(child: Text('$_daysPerWeek ${_daysPerWeek == 1 ? 'day' : 'days'} per week', style: const TextStyle(color: Color(0xFF4F8EF7), fontSize: 13, fontWeight: FontWeight.w600))),
+            Center(child: Text('$_daysPerWeek ${_daysPerWeek == 1 ? 'day' : 'days'} per week', style: const TextStyle(color: Color(0xFFFF5E00), fontSize: 13, fontWeight: FontWeight.w600))),
             const SizedBox(height: 28),
             _label('Session Duration'),
             const SizedBox(height: 12),
@@ -530,9 +530,9 @@ Strict Rules:
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     decoration: BoxDecoration(
-                      color: sel ? const Color(0xFF4F8EF7) : const Color(0xFF151929),
+                      color: sel ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: sel ? const Color(0xFF4F8EF7) : Colors.white12),
+                      border: Border.all(color: sel ? const Color(0xFFFF5E00) : Colors.white12),
                     ),
                     child: Text(d, style: TextStyle(color: sel ? Colors.white : Colors.white54, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
                   ),
@@ -545,7 +545,10 @@ Strict Rules:
             Row(
               children: _levels.map((level) {
                 final sel = _fitnessLevel == level;
-                final c = level == 'Beginner' ? const Color(0xFF4CAF50) : level == 'Intermediate' ? const Color(0xFFFF9800) : const Color(0xFFE53935);
+                // Volt Green for beginner, Orange for intermediate, Red for advanced
+                final c = level == 'Beginner' ? const Color(0xFFB9FF2B) : level == 'Intermediate' ? const Color(0xFFFF5E00) : const Color(0xFFFF3B30);
+                final textColor = sel ? (level == 'Beginner' ? Colors.black : Colors.white) : Colors.white54;
+                
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => setState(() => _fitnessLevel = level),
@@ -554,11 +557,11 @@ Strict Rules:
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
-                        color: sel ? c.withOpacity(0.15) : const Color(0xFF151929),
+                        color: sel ? c : const Color(0xFF1A1A1A),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: sel ? c : Colors.white12, width: sel ? 2 : 1),
                       ),
-                      child: Text(level, textAlign: TextAlign.center, style: TextStyle(color: sel ? c : Colors.white54, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
+                      child: Text(level, textAlign: TextAlign.center, style: TextStyle(color: textColor, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
                     ),
                   ),
                 );
@@ -602,16 +605,17 @@ Strict Rules:
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: noLimitations ? const Color(0xFF4CAF50).withOpacity(0.15) : const Color(0xFF151929),
+                  // Solid Volt Green to indicate clear/healthy state
+                  color: noLimitations ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: noLimitations ? const Color(0xFF4CAF50) : Colors.white12, width: noLimitations ? 2 : 1),
+                  border: Border.all(color: noLimitations ? const Color(0xFFB9FF2B) : Colors.white12, width: noLimitations ? 2 : 1),
                 ),
                 child: Row(children: [
                   Icon(noLimitations ? Icons.check_circle : Icons.check_circle_outline,
-                      color: noLimitations ? const Color(0xFF4CAF50) : Colors.white38, size: 22),
+                      color: noLimitations ? Colors.black : Colors.white38, size: 22),
                   const SizedBox(width: 12),
-                  const Expanded(child: Text("No physical limitations — I'm fully healthy",
-                      style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500))),
+                  Expanded(child: Text("No physical limitations — I'm fully healthy",
+                      style: TextStyle(color: noLimitations ? Colors.black : Colors.white70, fontSize: 14, fontWeight: FontWeight.w600))),
                 ]),
               ),
             ),
@@ -654,7 +658,7 @@ Strict Rules:
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: const Color(0xFF151929), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
                 child: Column(children: [
                   _switchRow('Wheelchair User', usesWheelchair, (v) => setState(() => usesWheelchair = v)),
                   const Divider(color: Colors.white12, height: 16),
@@ -679,7 +683,7 @@ Strict Rules:
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0E1A),
+        color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06))),
       ),
       child: SizedBox(
@@ -687,7 +691,7 @@ Strict Rules:
         child: ElevatedButton(
           onPressed: _isLoading ? null : _nextStep,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4F8EF7),
+            backgroundColor: const Color(0xFFFF5E00), // Electric Orange
             disabledBackgroundColor: Colors.white12,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
@@ -713,8 +717,8 @@ Strict Rules:
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: const Color(0xFF4F8EF7).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: const Color(0xFF4F8EF7), size: 24),
+        decoration: BoxDecoration(color: const Color(0xFFFF5E00).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: const Color(0xFFFF5E00), size: 24),
       ),
       const SizedBox(height: 12),
       Text(title, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
@@ -744,10 +748,10 @@ Strict Rules:
         suffixText: suffix,
         suffixStyle: const TextStyle(color: Colors.white38, fontSize: 13),
         filled: true,
-        fillColor: const Color(0xFF151929),
+        fillColor: const Color(0xFF1A1A1A),
         border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF4F8EF7), width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFF5E00), width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
@@ -755,7 +759,7 @@ Strict Rules:
 
   Widget _unitToggle(List<String> options, String selected, Function(String) onSelect) {
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF151929), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white12)),
       child: Row(
         children: options.map((opt) {
           final sel = selected == opt;
@@ -764,7 +768,7 @@ Strict Rules:
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(color: sel ? const Color(0xFF4F8EF7) : Colors.transparent, borderRadius: BorderRadius.circular(9)),
+              decoration: BoxDecoration(color: sel ? const Color(0xFFFF5E00) : Colors.transparent, borderRadius: BorderRadius.circular(9)),
               child: Text(opt, style: TextStyle(color: sel ? Colors.white : Colors.white38, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
             ),
           );
@@ -775,13 +779,13 @@ Strict Rules:
 
   Widget _limitSection(String title, List<List<dynamic>> items) {
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF151929), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Text(title, style: const TextStyle(color: Color(0xFF4F8EF7), fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
+            child: Text(title, style: const TextStyle(color: Color(0xFFFF5E00), fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
           ),
           const Divider(color: Colors.white12, height: 1),
           ...items.map((item) => _checkRow(item[0] as String, item[1] as bool, item[2] as Function(bool?))),
@@ -800,9 +804,9 @@ Strict Rules:
             duration: const Duration(milliseconds: 200),
             width: 20, height: 20,
             decoration: BoxDecoration(
-              color: value ? const Color(0xFF4F8EF7) : Colors.transparent,
+              color: value ? const Color(0xFFFF5E00) : Colors.transparent,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: value ? const Color(0xFF4F8EF7) : Colors.white30, width: 2),
+              border: Border.all(color: value ? const Color(0xFFFF5E00) : Colors.white30, width: 2),
             ),
             child: value ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
           ),
@@ -818,7 +822,7 @@ Strict Rules:
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFF4F8EF7), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFFFF5E00), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
       ],
     );
   }
