@@ -96,7 +96,6 @@ class RootNavigationScaffold extends StatefulWidget {
 class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   int _currentIndex = 0;
 
-  // The 4 main screens of your app
   final List<Widget> _screens = [
     const HomeDashboardTab(),
     const NutritionAssistantScreen(),
@@ -135,9 +134,18 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   }
 }
 
-// ── HOME DASHBOARD TAB ──────────────────────────────────────────────────────
-class HomeDashboardTab extends StatelessWidget {
+// ── HOME DASHBOARD TAB (Upgraded to StatefulWidget) ─────────────────────────
+class HomeDashboardTab extends StatefulWidget {
   const HomeDashboardTab({super.key});
+
+  @override
+  State<HomeDashboardTab> createState() => _HomeDashboardTabState();
+}
+
+class _HomeDashboardTabState extends State<HomeDashboardTab> {
+  // State variables moved to the class level so the analyzer knows they can change!
+  bool step1 = false;
+  bool step2 = false;
 
   @override
   Widget build(BuildContext context) {
@@ -156,25 +164,162 @@ class HomeDashboardTab extends StatelessWidget {
           final streak = data['current_streak'] ?? 0;
           final fatigue = data['fatigue_score'] ?? 5;
 
+          // Extract Data
+          final bodyStats = data['body_stats'] as Map<String, dynamic>? ?? {};
+          final healthInsights = data['health_insights'] as Map<String, dynamic>? ?? {};
+          
+          final currentWeightStr = bodyStats['weight'] ?? '-- kg';
+          final unit = currentWeightStr.toString().contains('lbs') ? 'lbs' : 'kg';
+          
+          final targetWeightRaw = bodyStats['target_weight'];
+          final targetWeightStr = targetWeightRaw != null ? '$targetWeightRaw$unit' : currentWeightStr;
+
+          final recommendedCalories = healthInsights['suggested_calories'] ?? 2000;
+          final int currentIntake = 1200; 
+          
+          double calorieProgress = currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
+          if (calorieProgress > 1.0) calorieProgress = 1.0;
+
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. Personalized Greeting
-                Text(
-                  'Ready to crush it,',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  name.toString().split(' ').first, // First name only
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        'welcome back,',
+                        style: TextStyle(
+                          fontSize: 18, 
+                          color: const Color(0xFFB9FF2B).withOpacity(0.8),
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      Text(
+                        name.toString().split(' ').first, 
+                        style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
                 
                 const SizedBox(height: 32),
 
-                // 2. Vitals Row (Streak & Fatigue)
+                // 2. Weight Goal Card
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A), 
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.3), width: 2), 
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        targetWeightStr,
+                        style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold, color: Colors.white, height: 1),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'current weight: $currentWeightStr',
+                        style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // 3. Today's Exercise Checklist
+                const Text(
+                  "Today's Exercise:",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    children: [
+                      CheckboxListTile(
+                        title: Text(
+                          'hit 10k steps', 
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontWeight: FontWeight.bold,
+                            decoration: step1 ? TextDecoration.lineThrough : null,
+                            decorationColor: Colors.grey,
+                          )
+                        ),
+                        value: step1,
+                        onChanged: (val) => setState(() => step1 = val!),
+                        activeColor: const Color(0xFFFF5E00), 
+                        checkColor: Colors.white,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      const Divider(height: 1, color: Colors.white10),
+                      CheckboxListTile(
+                        title: Text(
+                          'HIIT workout', 
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontWeight: FontWeight.bold,
+                            decoration: step2 ? TextDecoration.lineThrough : null,
+                            decorationColor: Colors.grey,
+                          )
+                        ),
+                        value: step2,
+                        onChanged: (val) => setState(() => step2 = val!),
+                        activeColor: const Color(0xFFFF5E00),
+                        checkColor: Colors.white,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // 4. Calories Progress Bar
+                const Text(
+                  "Calories Intake:",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: LinearProgressIndicator(
+                    value: calorieProgress,
+                    minHeight: 24,
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFB9FF2B)), 
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Intake: $currentIntake kcal', style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Text('Goal: $recommendedCalories kcal', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+
+                const SizedBox(height: 40),
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 24),
+
+                // 5. Existing Vitals Row 
                 Row(
                   children: [
                     Expanded(
@@ -182,27 +327,28 @@ class HomeDashboardTab extends StatelessWidget {
                         title: 'Day Streak',
                         value: '$streak',
                         icon: Icons.local_fire_department,
-                        bgColor: const Color(0xFFB9FF2B), // Volt Green
-                        textColor: Colors.black,
+                        bgColor: const Color(0xFF1A1A1A), 
+                        textColor: Colors.white,
+                        borderColor: const Color(0xFFFF5E00).withOpacity(0.5),
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: _buildVitalCard(
-                        title: 'Fatigue Level',
+                        title: 'Fatigue',
                         value: '$fatigue/10',
                         icon: Icons.battery_charging_full,
-                        bgColor: const Color(0xFF1A1A1A), // Dark Surface
+                        bgColor: const Color(0xFF1A1A1A), 
                         textColor: Colors.white,
-                        borderColor: fatigue > 7 ? const Color(0xFFFF5E00) : Colors.white10,
+                        borderColor: Colors.white10,
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 24),
 
-                // 3. Primary Action: Generate Routine
+                // 6. Generate Routine Button 
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -229,23 +375,18 @@ class HomeDashboardTab extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const WorkoutBuilderScreen()),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
                         child: Column(
                           children: [
-                            const Icon(Icons.bolt, size: 48, color: Colors.white),
-                            const SizedBox(height: 16),
+                            const Icon(Icons.bolt, size: 36, color: Colors.white),
+                            const SizedBox(height: 12),
                             const Text(
-                              'Generate Today\'s Routine',
+                              'Generate Routine',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'AI-tailored to your goals & recovery.',
-                              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
                             ),
                           ],
                         ),
@@ -253,6 +394,8 @@ class HomeDashboardTab extends StatelessWidget {
                     ),
                   ),
                 ),
+                
+                const SizedBox(height: 20),
               ],
             ),
           );
@@ -261,7 +404,6 @@ class HomeDashboardTab extends StatelessWidget {
     );
   }
 
-  // Helper for the small stat cards
   Widget _buildVitalCard({
     required String title,
     required String value,
