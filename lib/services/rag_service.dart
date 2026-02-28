@@ -7,6 +7,29 @@ class RagService {
   final _knowledgeBaseService = KnowledgeBaseService();
   final _db = FirebaseFirestore.instance;
 
+  // Dictionary to convert database keys into human-readable text for the AI
+  final Map<String, String> _injuryNames = {
+    'rotatorCuff': 'Rotator Cuff / Shoulder',
+    'deltoids': 'Deltoids',
+    'pectorals': 'Pectorals (Chest)',
+    'biceps': 'Biceps',
+    'triceps': 'Triceps',
+    'latsRhomboids': 'Lats / Rhomboids',
+    'elbowJoint': 'Elbow Joint',
+    'wristCarpals': 'Wrist / Carpals',
+    'glutesPelvis': 'Glutes / Pelvis',
+    'quadriceps': 'Quadriceps',
+    'hamstrings': 'Hamstrings',
+    'calves': 'Calves',
+    'kneeMeniscus': 'Knee / Meniscus',
+    'achillesAnkle': 'Achilles / Ankle',
+    'plantarFoot': 'Plantar / Foot',
+    'cervicalSpine': 'Cervical Spine (Neck)',
+    'thoracicSpine': 'Thoracic Spine (Mid-Back)',
+    'lumbarSpine': 'Lumbar Spine (Lower Back)',
+    'abdominalHernia': 'Abdominal Hernia',
+  };
+
   // Helper to unpack the complex biometrics map into a flat list of injuries
   List<String> _extractActiveLimitations(Map<String, dynamic>? biometrics) {
     if (biometrics == null || biometrics['noLimitations'] == true) {
@@ -17,7 +40,9 @@ class RagService {
 
     void checkSection(Map<String, dynamic>? section) {
       section?.forEach((key, value) {
-        if (value == true) active.add(key);
+        if (value == true) {
+          active.add(_injuryNames[key] ?? key); // Use readable name if available
+        }
       });
     }
 
@@ -27,11 +52,11 @@ class RagService {
 
     // Systemic needs careful handling to translate keys to readable strings
     final systemic = biometrics['systemic'] as Map<String, dynamic>?;
-    if (systemic?['cardiovascular'] == true) active.add('cardiovascular condition');
-    if (systemic?['respiratoryAsthma'] == true) active.add('asthma');
-    if (systemic?['osteoarthritis'] == true) active.add('osteoarthritis');
-    if (systemic?['wheelchair'] == true) active.add('wheelchair user');
-    if (systemic?['prosthesis'] == true) active.add('uses prosthesis');
+    if (systemic?['cardiovascular'] == true) active.add('Cardiovascular condition');
+    if (systemic?['respiratoryAsthma'] == true) active.add('Asthma / Respiratory');
+    if (systemic?['osteoarthritis'] == true) active.add('Osteoarthritis');
+    if (systemic?['wheelchair'] == true) active.add('Wheelchair user');
+    if (systemic?['prosthesis'] == true) active.add('Uses prosthesis');
 
     return active;
   }
@@ -55,7 +80,7 @@ class RagService {
 
     final userName = userData['name'] ?? 'the user';
     
-    // THE FIX: Parse the new biometrics map instead of the old flat list
+    // Parse the new biometrics map
     final biometrics = userData['biometrics'] as Map<String, dynamic>?;
     final limitations = _extractActiveLimitations(biometrics);
     final clinicalNotes = biometrics?['clinicalNotes'] as String? ?? '';
@@ -110,8 +135,7 @@ class RagService {
     }
 
     return '''
-You are an evidence-based fitness and nutrition assistant for the AI Fitness Companion app.
-Speak naturally and conversationally. Do not list references, sources, or personalization steps in your output.
+You are an expert, conversational fitness and nutrition AI assistant for the AI Fitness Companion app. 
 
 ════════════════════════════════════
 USER PROFILE
@@ -128,12 +152,12 @@ REFERENCE DOCUMENTS (retrieved from knowledge base)
 $contextBlock
 
 ════════════════════════════════════
-STRICT RULES
+STRICT RULES FOR YOUR RESPONSE
 ════════════════════════════════════
-1. Base your fitness advice ONLY on the Reference Documents above.
-2. Seamlessly adapt your advice to the user's profile, especially their physical limitations. If a reference recommends something that conflicts with their injury, flag it conversationally and suggest a safe alternative.
-3. If the answer is not in the references, say exactly: "This topic is not covered in the current knowledge base."
-4. Never invent information. Never use outside knowledge.
+1. ACT AS AN EXPERT TRAINER: Use the Reference Documents as the FOUNDATION of your knowledge, but you MUST use your general expertise to ADAPT that knowledge to the user's specific injuries and goals.
+2. PROTECT THE USER: If the reference documents suggest an exercise that conflicts with the user's Physical Limitations (e.g., suggesting barbell squats to someone with a knee injury), you MUST explicitly flag it as unsafe and suggest a safe alternative using your own knowledge. 
+3. BE CONVERSATIONAL: Do NOT say things like "Based on the reference texts" or "Considering your physical limitations (x, y, z)." Speak naturally, like a human coach talking to a client they already know. 
+4. DO NOT REFUSE TO HELP: You are allowed to generate specific exercise recommendations as long as they respect the user's injury profile.
 
 ════════════════════════════════════
 USER'S QUESTION
