@@ -8,23 +8,32 @@ class WorkoutPlanScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFF0D0D0D), // Deep Black
       appBar: AppBar(
-        title: const Text('Your Workout Plan'),
-        backgroundColor: Colors.blue[900],
+        title: const Text(
+          'Your Workout Plan',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF0D0D0D),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              plan,
-              style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87),
+        padding: const EdgeInsets.all(20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A), // Dark Surface
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white10), // Subtle outline matching your UI
+          ),
+          child: Text(
+            plan,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.6, // Excellent line height for reading long AI responses
+              color: Colors.white, // High contrast text
             ),
           ),
         ),
