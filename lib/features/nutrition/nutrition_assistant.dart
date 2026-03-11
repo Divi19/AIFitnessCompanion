@@ -67,7 +67,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
 
         // Scroll down for the first few chunks to let the bubble grow larger 
         // than the loading spinner, then stop so the user can read
-        if (chunkCount <= 5) {
+        if (chunkCount <= 7) {
           _scrollToBottom();
         }
       }
