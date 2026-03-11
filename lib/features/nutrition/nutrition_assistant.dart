@@ -42,10 +42,11 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
       );
 
       bool isFirstChunk = true;
+      int chunkCount = 0; // NEW: Track how many chunks have arrived
 
       //Listen to the stream as it arrives over the network
       await for (final chunk in stream) {
-        bool justStartedTyping = false;
+        chunkCount++; // Increment on every chunk
         
         setState(() {
           if (isFirstChunk) {
@@ -53,7 +54,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
             _isLoading = false;
             _messages.add({'role': 'assistant', 'text': chunk});
             isFirstChunk = false;
-            justStartedTyping = true;
           } else {
             // Subsequent chunks which appends text to the existing assistant bubble
             final lastIndex = _messages.length - 1;
@@ -65,8 +65,9 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
           }
         });
 
-        // Trigger the scroll only on the very first chunk of text
-        if (justStartedTyping) {
+        // Scroll down for the first few chunks to let the bubble grow larger 
+        // than the loading spinner, then stop so the user can read
+        if (chunkCount <= 5) {
           _scrollToBottom();
         }
       }
