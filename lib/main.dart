@@ -250,14 +250,16 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           final healthInsights =
               data['health_insights'] as Map<String, dynamic>? ?? {};
 
-          final currentWeightStr = bodyStats['weight'] ?? '-- kg';
-          final unit = currentWeightStr.toString().contains('lbs')
-              ? 'lbs'
-              : 'kg';
+          final currentWeightStr = bodyStats['weight']?.toString() ?? '-- kg';
+          final unit = currentWeightStr.contains('lbs') ? 'lbs' : 'kg';
 
-          final targetWeightRaw = bodyStats['target_weight'];
+          final targetWeightRaw = bodyStats['target_weight']?.toString();
+          
+          //Check if the database value already contains 'kg' or 'lbs'
           final targetWeightStr = targetWeightRaw != null
-              ? '$targetWeightRaw $unit'
+              ? (targetWeightRaw.contains('kg') || targetWeightRaw.contains('lbs')
+                  ? targetWeightRaw
+                  : '$targetWeightRaw $unit')
               : currentWeightStr;
 
           final recommendedCalories =
