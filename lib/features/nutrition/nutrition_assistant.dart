@@ -35,26 +35,46 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     _scrollToBottom();
 
     try {
-      final response = await _ragService.query(
+      // 1. Get the stream from your updated RagService
+      final stream = _ragService.query(
         userQuestion: question,
         userId: userId,
       );
 
-      setState(() {
-        _messages.add({'role': 'assistant', 'text': response});
-        _isLoading = false;
-      });
+      bool isFirstChunk = true;
+
+      // 2. Listen to the stream as it arrives over the network
+      await for (final chunk in stream) {
+        setState(() {
+          if (isFirstChunk) {
+            // First chunk arrives: turn off loader and create the assistant bubble
+            _isLoading = false;
+            _messages.add({'role': 'assistant', 'text': chunk});
+            isFirstChunk = false;
+          } else {
+            // Subsequent chunks: append text to the existing assistant bubble
+            final lastIndex = _messages.length - 1;
+            final currentText = _messages[lastIndex]['text']!;
+            _messages[lastIndex] = {
+              'role': 'assistant',
+              'text': currentText + chunk
+            };
+          }
+        });
+        
+        // Keep scrolling to the bottom as the text grows
+        _scrollToBottom();
+      }
     } catch (e) {
       setState(() {
+        _isLoading = false;
         _messages.add({
           'role': 'assistant',
           'text': 'Something went wrong. Please try again.\nError: $e',
         });
-        _isLoading = false;
       });
+      _scrollToBottom();
     }
-
-    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -131,7 +151,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                     controller: _controller,
                     textCapitalization: TextCapitalization.sentences,
                     style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: 'e.g. How much protein do I need?',
                       hintStyle: TextStyle(color: Colors.grey),
                       border: InputBorder.none,
