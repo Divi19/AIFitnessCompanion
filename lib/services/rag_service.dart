@@ -89,13 +89,13 @@ class RagService {
     final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
     final currentStreak = (userData['current_streak'] as num?)?.toInt() ?? 0;
 
-    // STEP 3.5: Fetch ONLY the most recent Workout Plan
+    //Fetch only the most recent Workout Plan in the collection
     final workoutPlansSnapshot = await _db
         .collection('users')
         .doc(userId)
         .collection('workout_plans')
-        .orderBy('timestamp', descending: true) // Sort newest first
-        .limit(1) // Only grab the single newest plan
+        .orderBy('createdAt', descending: true)
+        .limit(1)
         .get();
 
     String formattedWorkoutPlans = 'No active workout plans found.';
