@@ -45,12 +45,15 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
 
       //Listen to the stream as it arrives over the network
       await for (final chunk in stream) {
+        bool justStartedTyping = false;
+        
         setState(() {
           if (isFirstChunk) {
             // First chunk arrives which turns off loader and creates the assistant bubble
             _isLoading = false;
             _messages.add({'role': 'assistant', 'text': chunk});
             isFirstChunk = false;
+            justStartedTyping = true;
           } else {
             // Subsequent chunks which appends text to the existing assistant bubble
             final lastIndex = _messages.length - 1;
@@ -61,7 +64,11 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
             };
           }
         });
-        
+
+        // Trigger the scroll only on the very first chunk of text
+        if (justStartedTyping) {
+          _scrollToBottom();
+        }
       }
     } catch (e) {
       setState(() {
