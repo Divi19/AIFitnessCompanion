@@ -20,6 +20,18 @@ class GeminiService {
     return response.text ?? 'Could not generate a response. Please try again.';
   }
 
+  // ── TEXT STREAMING (NEW) ──────────────────────────────────────────────────
+  Stream<String> streamResponse(String fullPrompt) async* {
+    final content = [Content.text(fullPrompt)];
+    final responseStream = _generationModel.generateContentStream(content);
+    
+    await for (final chunk in responseStream) {
+      if (chunk.text != null) {
+        yield chunk.text!;
+      }
+    }
+  }
+
   // ── IMAGE + TEXT ANALYSIS (Diet & Menu scanning) ──────────────────────────
   Future<String> analyzeImage(List<int> imageBytes, String prompt) async {
     final content = [
