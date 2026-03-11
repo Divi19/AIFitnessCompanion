@@ -89,20 +89,19 @@ class RagService {
     final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
     final currentStreak = (userData['current_streak'] as num?)?.toInt() ?? 0;
 
-    // NEW STEP 3.5: Fetch Workout Plans Subcollection
+    // STEP 3.5: Fetch ONLY the most recent Workout Plan
     final workoutPlansSnapshot = await _db
         .collection('users')
         .doc(userId)
         .collection('workout_plans')
-        .limit(5) // Limit to the most recent/relevant plans to save tokens
+        .orderBy('timestamp', descending: true) // Sort newest first
+        .limit(1) // Only grab the single newest plan
         .get();
 
     String formattedWorkoutPlans = 'No active workout plans found.';
     if (workoutPlansSnapshot.docs.isNotEmpty) {
-      // Map the raw Firestore documents into a readable string for the LLM
-      formattedWorkoutPlans = workoutPlansSnapshot.docs.map((doc) {
-        return 'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
-      }).join('\n\n');
+      final doc = workoutPlansSnapshot.docs.first;
+      formattedWorkoutPlans = 'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
     }
 
     // STEP 4: Build the augmented prompt
@@ -115,7 +114,7 @@ class RagService {
       fitnessGoal: fitnessGoal,
       currentStreak: currentStreak,
       retrievedChunks: relevantChunks,
-      workoutPlans: formattedWorkoutPlans, // Pass the new data in
+      workoutPlans: formattedWorkoutPlans,
     );
 
     // STEP 5: Generate response
@@ -131,7 +130,7 @@ class RagService {
     required String fitnessGoal,
     required int currentStreak,
     required List<Map<String, dynamic>> retrievedChunks,
-    required String workoutPlans, // Added parameter
+    required String workoutPlans,
   }) {
     // Just map the raw text. No reference numbers or filenames.
     final contextBlock = retrievedChunks
