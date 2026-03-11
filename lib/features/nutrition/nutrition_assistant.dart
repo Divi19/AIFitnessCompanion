@@ -35,7 +35,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     _scrollToBottom();
 
     try {
-      // 1. Get the stream from your updated RagService
+      //Get the stream from the updated RagService
       final stream = _ragService.query(
         userQuestion: question,
         userId: userId,
@@ -43,16 +43,16 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
 
       bool isFirstChunk = true;
 
-      // 2. Listen to the stream as it arrives over the network
+      //Listen to the stream as it arrives over the network
       await for (final chunk in stream) {
         setState(() {
           if (isFirstChunk) {
-            // First chunk arrives: turn off loader and create the assistant bubble
+            // First chunk arrives which turns off loader and creates the assistant bubble
             _isLoading = false;
             _messages.add({'role': 'assistant', 'text': chunk});
             isFirstChunk = false;
           } else {
-            // Subsequent chunks: append text to the existing assistant bubble
+            // Subsequent chunks which appends text to the existing assistant bubble
             final lastIndex = _messages.length - 1;
             final currentText = _messages[lastIndex]['text']!;
             _messages[lastIndex] = {
@@ -62,8 +62,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
           }
         });
         
-        // Keep scrolling to the bottom as the text grows
-        _scrollToBottom();
       }
     } catch (e) {
       setState(() {
