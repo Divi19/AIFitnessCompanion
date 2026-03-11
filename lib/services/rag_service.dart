@@ -61,10 +61,11 @@ class RagService {
     return active;
   }
 
-  Future<String> query({
+  // CHANGED: Now returns a Stream of strings and uses async*
+  Stream<String> query({
     required String userQuestion,
     required String userId,
-  }) async {
+  }) async* {
     // STEP 1: Embed the user's question
     final queryVector = await _geminiService.getQueryEmbedding(userQuestion);
 
@@ -117,8 +118,8 @@ class RagService {
       workoutPlans: formattedWorkoutPlans,
     );
 
-    // STEP 5: Generate response
-    return _geminiService.generateResponse(prompt);
+    // STEP 5: Yield the stream response directly from the Gemini service
+    yield* _geminiService.streamResponse(prompt);
   }
 
   String _buildPrompt({
