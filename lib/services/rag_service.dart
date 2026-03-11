@@ -80,7 +80,7 @@ class RagService {
 
     final userName = userData['name'] ?? 'the user';
     
-    // Parse the new biometrics map
+    // Parse the biometrics map
     final biometrics = userData['biometrics'] as Map<String, dynamic>?;
     final limitations = _extractActiveLimitations(biometrics);
     final clinicalNotes = biometrics?['clinicalNotes'] as String? ?? '';
@@ -88,6 +88,22 @@ class RagService {
     final fatigueScore = (userData['fatigue_score'] as num?)?.toInt() ?? 5;
     final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
     final currentStreak = (userData['current_streak'] as num?)?.toInt() ?? 0;
+
+    // NEW STEP 3.5: Fetch Workout Plans Subcollection
+    final workoutPlansSnapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('workout_plans')
+        .limit(5) // Limit to the most recent/relevant plans to save tokens
+        .get();
+
+    String formattedWorkoutPlans = 'No active workout plans found.';
+    if (workoutPlansSnapshot.docs.isNotEmpty) {
+      // Map the raw Firestore documents into a readable string for the LLM
+      formattedWorkoutPlans = workoutPlansSnapshot.docs.map((doc) {
+        return 'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
+      }).join('\n\n');
+    }
 
     // STEP 4: Build the augmented prompt
     final prompt = _buildPrompt(
@@ -99,6 +115,7 @@ class RagService {
       fitnessGoal: fitnessGoal,
       currentStreak: currentStreak,
       retrievedChunks: relevantChunks,
+      workoutPlans: formattedWorkoutPlans, // Pass the new data in
     );
 
     // STEP 5: Generate response
@@ -114,6 +131,7 @@ class RagService {
     required String fitnessGoal,
     required int currentStreak,
     required List<Map<String, dynamic>> retrievedChunks,
+    required String workoutPlans, // Added parameter
   }) {
     // Just map the raw text. No reference numbers or filenames.
     final contextBlock = retrievedChunks
@@ -147,6 +165,11 @@ Current Fatigue Score: $fatigueContext
 Workout Streak: $currentStreak days
 
 ════════════════════════════════════
+USER'S CURRENT WORKOUT PLANS
+════════════════════════════════════
+$workoutPlans
+
+════════════════════════════════════
 REFERENCE DOCUMENTS (retrieved from knowledge base)
 ════════════════════════════════════
 $contextBlock
@@ -154,7 +177,7 @@ $contextBlock
 ════════════════════════════════════
 STRICT RULES FOR YOUR RESPONSE
 ════════════════════════════════════
-1. ACT AS AN EXPERT TRAINER: Use the Reference Documents as the FOUNDATION of your knowledge, but you MUST use your general expertise to ADAPT that knowledge to the user's specific injuries and goals.
+1. ACT AS AN EXPERT TRAINER: Use the Reference Documents as the FOUNDATION of your knowledge, but you MUST use your general expertise to ADAPT that knowledge to the user's specific injuries, goals, and their CURRENT WORKOUT PLANS.
 2. PROTECT THE USER: If the reference documents suggest an exercise that conflicts with the user's Physical Limitations (e.g., suggesting barbell squats to someone with a knee injury), you MUST explicitly flag it as unsafe and suggest a safe alternative using your own knowledge. 
 3. BE CONVERSATIONAL: Do NOT say things like "Based on the reference texts" or "Considering your physical limitations (x, y, z)." Speak naturally, like a human coach talking to a client they already know. 
 4. DO NOT REFUSE TO HELP: You are allowed to generate specific exercise recommendations as long as they respect the user's injury profile.
