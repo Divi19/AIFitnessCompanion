@@ -212,18 +212,19 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(isUser ? 16 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
-          // NEW: Softer transparent orange border
+          // NEW: Crisper, highly visible border
           border: isUser 
               ? null 
-              : Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1),
-          // NEW: Subtle orange glow for the AI chat bubble
+              : Border.all(color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
+          // NEW: Directional backlit neon glow
           boxShadow: isUser 
               ? null 
               : [
                   BoxShadow(
-                    color: const Color(0xFFFF5E00).withOpacity(0.08),
-                    blurRadius: 15,
-                    spreadRadius: 1,
+                    color: const Color(0xFFFF5E00).withOpacity(0.12),
+                    blurRadius: 12,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 4), // Pushes the glow downward
                   ),
                 ],
         ),
@@ -286,14 +287,15 @@ class _TypingIndicator extends StatelessWidget {
             bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(16),
           ),
-          // NEW: Softer transparent orange border
-          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1),
-          // Kept the subtle orange glow
+          // NEW: Crisper, highly visible border
+          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
+          // NEW: Directional backlit neon glow
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF5E00).withOpacity(0.08),
-              blurRadius: 15,
-              spreadRadius: 1,
+              color: const Color(0xFFFF5E00).withOpacity(0.12),
+              blurRadius: 12,
+              spreadRadius: 0,
+              offset: const Offset(0, 4), // Pushes the glow downward
             ),
           ],
         ),
