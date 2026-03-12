@@ -34,11 +34,16 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     _controller.clear();
     _scrollToBottom();
 
+    // Extract the conversation history BEFORE the current question
+    // _messages has the new question at the end, so we omit the last item.
+    final previousMessages = _messages.sublist(0, _messages.length - 1);
+
     try {
       //Get the stream from the updated RagService
       final stream = _ragService.query(
         userQuestion: question,
         userId: userId,
+        chatHistory: previousMessages, // NEW: Pass the memory to the backend
       );
 
       bool isFirstChunk = true;
@@ -212,11 +217,11 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(isUser ? 16 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
-          // NEW: Crisper, highly visible border
+          // Crisper, highly visible border
           border: isUser 
               ? null 
               : Border.all(color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
-          // NEW: Directional backlit neon glow
+          // Directional backlit neon glow
           boxShadow: isUser 
               ? null 
               : [
@@ -287,9 +292,9 @@ class _TypingIndicator extends StatelessWidget {
             bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(16),
           ),
-          // NEW: Crisper, highly visible border
+          // Crisper, highly visible border
           border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
-          // NEW: Directional backlit neon glow
+          // Directional backlit neon glow
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFFF5E00).withOpacity(0.12),
