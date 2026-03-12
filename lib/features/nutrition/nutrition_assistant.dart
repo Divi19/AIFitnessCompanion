@@ -212,7 +212,8 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(isUser ? 16 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
-          border: isUser ? null : Border.all(color: Colors.white10),
+          // NEW: Uniform orange border for the AI bubbles
+          border: isUser ? null : Border.all(color: const Color(0xFFFF5E00), width: 1),
         ),
         child: isUser
             ? Text(
@@ -273,8 +274,9 @@ class _TypingIndicator extends StatelessWidget {
             bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(16),
           ),
-          border: Border.all(color: Colors.white10),
-          // NEW: A very subtle orange ambient glow while thinking
+          // NEW: Uniform orange border for the typing indicator
+          border: Border.all(color: const Color(0xFFFF5E00), width: 1),
+          // Kept the subtle orange glow to pair with the border
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFFF5E00).withOpacity(0.08),
@@ -291,7 +293,7 @@ class _TypingIndicator extends StatelessWidget {
               height: 16,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Color(0xFFFF5E00), // NEW: Orange Spinner
+                color: Color(0xFFFF5E00), // Orange Spinner
               ),
             ),
             SizedBox(width: 12),
