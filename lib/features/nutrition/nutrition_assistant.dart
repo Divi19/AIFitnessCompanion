@@ -274,6 +274,14 @@ class _TypingIndicator extends StatelessWidget {
             bottomRight: Radius.circular(16),
           ),
           border: Border.all(color: Colors.white10),
+          // NEW: A very subtle orange ambient glow while thinking
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF5E00).withOpacity(0.08),
+              blurRadius: 15,
+              spreadRadius: 1,
+            ),
+          ],
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -283,7 +291,7 @@ class _TypingIndicator extends StatelessWidget {
               height: 16,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Color(0xFFB9FF2B), // Volt Green loader
+                color: Color(0xFFFF5E00), // NEW: Orange Spinner
               ),
             ),
             SizedBox(width: 12),
