@@ -41,7 +41,7 @@ class RagService {
     void checkSection(Map<String, dynamic>? section) {
       section?.forEach((key, value) {
         if (value == true) {
-          active.add(_injuryNames[key] ?? key); // Use readable name if available
+          active.add(_injuryNames[key] ?? key);
         }
       });
     }
@@ -61,10 +61,10 @@ class RagService {
     return active;
   }
 
-  // CHANGED: Now returns a Stream of strings and uses async*
   Stream<String> query({
     required String userQuestion,
     required String userId,
+    List<Map<String, String>> chatHistory = const [],
   }) async* {
     // STEP 1: Embed the user's question
     final queryVector = await _geminiService.getQueryEmbedding(userQuestion);
@@ -105,6 +105,20 @@ class RagService {
       formattedWorkoutPlans = 'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
     }
 
+    //Format the Chat History (Sliding Window of last 6 messages)
+    String formattedHistory = 'No prior context. This is the start of the conversation.';
+    if (chatHistory.isNotEmpty) {
+      // Take only the last 6 messages to save tokens and keep responses fast
+      final recentHistory = chatHistory.length > 6 
+          ? chatHistory.sublist(chatHistory.length - 6) 
+          : chatHistory;
+          
+      formattedHistory = recentHistory.map((msg) {
+        final role = msg['role'] == 'user' ? 'USER' : 'ASSISTANT';
+        return '$role: ${msg['text']}';
+      }).join('\n\n');
+    }
+
     // STEP 4: Build the augmented prompt
     final prompt = _buildPrompt(
       userQuestion: userQuestion,
@@ -116,6 +130,7 @@ class RagService {
       currentStreak: currentStreak,
       retrievedChunks: relevantChunks,
       workoutPlans: formattedWorkoutPlans,
+      chatHistory: formattedHistory, // Pass the formatted history
     );
 
     // STEP 5: Yield the stream response directly from the Gemini service
@@ -132,6 +147,7 @@ class RagService {
     required int currentStreak,
     required List<Map<String, dynamic>> retrievedChunks,
     required String workoutPlans,
+    required String chatHistory,
   }) {
     // Just map the raw text. No reference numbers or filenames.
     final contextBlock = retrievedChunks
@@ -183,7 +199,12 @@ STRICT RULES FOR YOUR RESPONSE
 4. DO NOT REFUSE TO HELP: You are allowed to generate specific exercise recommendations as long as they respect the user's injury profile.
 
 ════════════════════════════════════
-USER'S QUESTION
+RECENT CONVERSATION HISTORY
+════════════════════════════════════
+$chatHistory
+
+════════════════════════════════════
+USER'S CURRENT QUESTION
 ════════════════════════════════════
 $userQuestion
 
