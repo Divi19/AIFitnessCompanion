@@ -109,9 +109,6 @@ class GeminiService {
 // Uses Gemini REST directly — no extra package needed.
 class MealGeminiService {
 
-  // NOTE: Move this key to AppConstants and .env before going to production
-  static const String _apiKey = 'AIzaSyC7ukW7XGh9BinYOza2N69f6P0uisDc3IQ';
-
   Future<List<Map<String, dynamic>>> classifyMeal(List<int> imageBytes) async {
     const prompt = '''
 You are a nutritionist AI. Analyze this food image and return ONLY a JSON array 
@@ -140,8 +137,15 @@ Rules:
 ''';
 
     try {
+      if (AppConstants.geminiApiKey.isEmpty) {
+        throw Exception(
+          'GEMINI_API_KEY is empty. '
+          'Run with: flutter run --dart-define-from-file=.env',
+        );
+      }
+
       final uri = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=$_apiKey',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${AppConstants.geminiApiKey}',
       );
 
       // Convert image bytes to base64 for the REST API
