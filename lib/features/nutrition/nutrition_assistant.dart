@@ -42,7 +42,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
       );
 
       bool isFirstChunk = true;
-      int chunkCount = 0; // NEW: Track how many chunks have arrived
+      int chunkCount = 0; // Track how many chunks have arrived
 
       //Listen to the stream as it arrives over the network
       await for (final chunk in stream) {
@@ -212,8 +212,20 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(isUser ? 16 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
-          // NEW: Uniform orange border for the AI bubbles
-          border: isUser ? null : Border.all(color: const Color(0xFFFF5E00), width: 1),
+          // NEW: Softer transparent orange border
+          border: isUser 
+              ? null 
+              : Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1),
+          // NEW: Subtle orange glow for the AI chat bubble
+          boxShadow: isUser 
+              ? null 
+              : [
+                  BoxShadow(
+                    color: const Color(0xFFFF5E00).withOpacity(0.08),
+                    blurRadius: 15,
+                    spreadRadius: 1,
+                  ),
+                ],
         ),
         child: isUser
             ? Text(
@@ -274,9 +286,9 @@ class _TypingIndicator extends StatelessWidget {
             bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(16),
           ),
-          // NEW: Uniform orange border for the typing indicator
-          border: Border.all(color: const Color(0xFFFF5E00), width: 1),
-          // Kept the subtle orange glow to pair with the border
+          // NEW: Softer transparent orange border
+          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1),
+          // Kept the subtle orange glow
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFFF5E00).withOpacity(0.08),
