@@ -175,13 +175,13 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B),
+                    color: _isLoading ? Colors.transparent : const Color(0xFFFF5E00), // Updated to Orange
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
                     icon: Icon(
                       Icons.send,
-                      color: _isLoading ? Colors.grey : Colors.black,
+                      color: _isLoading ? Colors.grey : Colors.white,
                     ),
                     onPressed: _isLoading ? null : _sendMessage,
                   ),
@@ -236,7 +236,7 @@ class _ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
+          color: isUser ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A), // Orange user bubble
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -261,9 +261,9 @@ class _ChatBubble extends StatelessWidget {
             ? Text(
                 text,
                 style: const TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontSize: 15,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               )
             : MarkdownBody(
@@ -276,7 +276,7 @@ class _ChatBubble extends StatelessWidget {
                   h3:         const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, height: 1.8),
                   strong:     const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                   em:         const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
-                  listBullet: const TextStyle(color: Color(0xFFB9FF2B), fontSize: 15),
+                  listBullet: const TextStyle(color: Color(0xFFFF5E00), fontSize: 15),
                 ),
               ),
       ),
@@ -284,7 +284,7 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-// ── NEW: COMPLETELY REDESIGNED PREMIUM CARD DECK ────────────────────────────
+// ── NEW: TINDER-STYLE SWIPEABLE CARD DECK ────────────────────────────
 class _CardDeck extends StatefulWidget {
   final List<Map<String, dynamic>> cards;
 
@@ -295,149 +295,189 @@ class _CardDeck extends StatefulWidget {
 }
 
 class _CardDeckState extends State<_CardDeck> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  late List<Map<String, dynamic>> _currentCards;
 
   @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _currentCards = List.from(widget.cards);
+  }
+
+  void _resetCards() {
+    setState(() {
+      _currentCards = List.from(widget.cards);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_currentCards.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 16),
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: _resetCards,
+          icon: const Icon(Icons.refresh, color: Color(0xFFFF5E00)),
+          label: const Text(
+            'Review Cards Again', 
+            style: TextStyle(color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
-      height: 340, // Taller, more engaging canvas
-      child: Column(
-        children: [
-          Expanded(
-            child: PageView.builder(
-              controller: _pageController,
-              onPageChanged: (int page) {
+      height: 380, // Taller canvas for the physical deck feel
+      child: Stack(
+        alignment: Alignment.center,
+        // Reverse the list so the first item renders on top of the stack
+        children: _currentCards.asMap().entries.map((entry) {
+          final index = entry.key;
+          final card = entry.value;
+
+          // Prevent rendering a massive stack; only show top 3 layers
+          if (index > 2) return const SizedBox.shrink();
+
+          // Calculate offset and scale to create the 3D stacking visual
+          final scale = 1.0 - (index * 0.05);
+          final offset = index * 14.0;
+
+          final cardWidget = Positioned(
+            top: offset,
+            bottom: 0,
+            left: index * 8.0,
+            right: index * 8.0,
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.topCenter,
+              child: _buildCardContent(card),
+            ),
+          );
+
+          // Wrap only the absolute top card (index 0) in the swipe detector
+          if (index == 0) {
+            return Dismissible(
+              key: UniqueKey(), // Forces a clean rebuild when swiped
+              onDismissed: (direction) {
                 setState(() {
-                  _currentPage = page;
+                  _currentCards.removeAt(0);
                 });
               },
-              itemCount: widget.cards.length,
-              itemBuilder: (context, index) {
-                final card = widget.cards[index];
-                final title = card['title'] ?? card['name'] ?? card['step'] ?? 'Detail';
-                final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
-                final badge = card['badge'] ?? card['impact'] ?? card['muscle_group'] ?? card['confidence'];
+              child: cardWidget,
+            );
+          }
 
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4), 
-                  padding: const EdgeInsets.all(20),
+          return cardWidget;
+        }).toList().reversed.toList(),
+      ),
+    );
+  }
+
+  Widget _buildCardContent(Map<String, dynamic> card) {
+    final title = card['title'] ?? card['name'] ?? card['step'] ?? 'Detail';
+    final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
+    final badge = card['badge'] ?? card['impact'] ?? card['muscle_group'] ?? card['confidence'];
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2E1200), // Deep tinted Orange/Brown
+            Color(0xFF110500), // Near black
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFFF5E00), width: 2), // Heavy Orange Border
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF5E00).withOpacity(0.25),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (badge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF2A2A2A), // Lighter dark grey
-                        Color(0xFF111111), // Deep grey
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: const Color(0xFFB9FF2B).withOpacity(0.5), 
-                      width: 1.5
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      )
-                    ],
+                    color: const Color(0xFFFF5E00), // Solid Orange
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Top Row: High-Contrast Badge and Icon
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          if (badge != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFB9FF2B), // Solid Volt Green
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                badge.toString().toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.black, // Inverted for sharp contrast
-                                  fontSize: 11, 
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          const Icon(Icons.fitness_center, color: Color(0xFFFF5E00), size: 24),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Title
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white, 
-                          fontSize: 22, 
-                          fontWeight: FontWeight.w800,
-                          height: 1.2,
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Divider(color: Colors.white24, height: 1),
-                      ),
-                      // Scrollable Description Area
-                      Expanded(
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Text(
-                            description,
-                            style: const TextStyle(
-                              color: Colors.white70, 
-                              fontSize: 15, 
-                              height: 1.6,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    badge.toString().toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12, 
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                );
-              },
+                ),
+              const Icon(Icons.local_fire_department, color: Color(0xFFFF5E00), size: 28),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white, 
+              fontSize: 26, 
+              fontWeight: FontWeight.w900,
+              height: 1.1,
             ),
           ),
-          const SizedBox(height: 16),
-          // Elegant Animated Dot Indicator
-          if (widget.cards.length > 1)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                widget.cards.length,
-                (index) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  height: 6,
-                  width: _currentPage == index ? 24 : 8, // Pill shape for active card
-                  decoration: BoxDecoration(
-                    color: _currentPage == index 
-                        ? const Color(0xFFB9FF2B) 
-                        : Colors.white24,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(color: Colors.white24, height: 1),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Text(
+                description,
+                style: const TextStyle(
+                  color: Colors.white, 
+                  fontSize: 16, 
+                  height: 1.6,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          // Subtle hint at the bottom to remind them to swipe
+          const Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.keyboard_double_arrow_left, color: Colors.white38, size: 16),
+                SizedBox(width: 8),
+                Text(
+                  'SWIPE TO DISMISS',
+                  style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
+                ),
+                SizedBox(width: 8),
+                Icon(Icons.keyboard_double_arrow_right, color: Colors.white38, size: 16),
+              ],
+            ),
+          )
         ],
       ),
     );
@@ -458,10 +498,10 @@ class _CardGenerationPlaceholder extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF2A2A2A), Color(0xFF111111)],
+            colors: [Color(0xFF2E1200), Color(0xFF110500)],
           ),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1.5),
+          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.5), width: 1.5),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -473,7 +513,7 @@ class _CardGenerationPlaceholder extends StatelessWidget {
             ),
             SizedBox(width: 16),
             Text(
-              'Designing custom plan...',
+              'Designing custom deck...',
               style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 15),
             ),
           ],
