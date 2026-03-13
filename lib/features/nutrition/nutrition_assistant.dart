@@ -184,13 +184,13 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B), // Volt Green Button
+                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
                     icon: Icon(
                       Icons.send,
-                      color: _isLoading ? Colors.grey : Colors.black, // Black icon for contrast
+                      color: _isLoading ? Colors.grey : Colors.black,
                     ),
                     onPressed: _isLoading ? null : _sendMessage,
                   ),
@@ -245,7 +245,7 @@ class _ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A), // Volt Green user bubble
+          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -270,7 +270,7 @@ class _ChatBubble extends StatelessWidget {
             ? Text(
                 text,
                 style: const TextStyle(
-                  color: Colors.black, // Dark text on light green bubble
+                  color: Colors.black,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -293,7 +293,7 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-// ── NEW: TINDER-STYLE SWIPEABLE CARD DECK ────────────────────────────
+// ── TINDER-STYLE SWIPEABLE CARD DECK ────────────────────────────
 class _CardDeck extends StatefulWidget {
   final List<Map<String, dynamic>> cards;
 
@@ -345,7 +345,6 @@ class _CardDeckState extends State<_CardDeck> {
       height: 380, // Taller canvas for the physical deck feel
       child: Stack(
         alignment: Alignment.center,
-        // Reverse the list so the first item renders on top of the stack
         children: _currentCards.asMap().entries.map((entry) {
           final index = entry.key;
           final card = entry.value;
@@ -357,32 +356,34 @@ class _CardDeckState extends State<_CardDeck> {
           final scale = 1.0 - (index * 0.05);
           final offset = index * 14.0;
 
-          final cardWidget = Positioned(
-            top: offset,
-            bottom: 0,
-            left: index * 8.0,
-            right: index * 8.0,
-            child: Transform.scale(
-              scale: scale,
-              alignment: Alignment.topCenter,
-              child: _buildCardContent(card),
-            ),
+          // 1. Build the scaled card first
+          Widget innerCard = Transform.scale(
+            scale: scale,
+            alignment: Alignment.topCenter,
+            child: _buildCardContent(card),
           );
 
-          // Wrap only the absolute top card (index 0) in the swipe detector
+          // 2. Wrap ONLY the top card in the swipe detector
           if (index == 0) {
-            return Dismissible(
+            innerCard = Dismissible(
               key: UniqueKey(), // Forces a clean rebuild when swiped
               onDismissed: (direction) {
                 setState(() {
                   _currentCards.removeAt(0);
                 });
               },
-              child: cardWidget,
+              child: innerCard,
             );
           }
 
-          return cardWidget;
+          // 3. FINALLY, wrap in Positioned so it sits directly inside the Stack (Fixes the error)
+          return Positioned(
+            top: offset,
+            bottom: 0,
+            left: index * 8.0,
+            right: index * 8.0,
+            child: innerCard,
+          );
         }).toList().reversed.toList(),
       ),
     );
@@ -471,7 +472,6 @@ class _CardDeckState extends State<_CardDeck> {
             ),
           ),
           const SizedBox(height: 12),
-          // Subtle hint at the bottom to remind them to swipe
           const Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
