@@ -114,12 +114,21 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: const Text(
-          'Fitness & Nutrition Assistant',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: const Row(
+          children: [
+            Icon(Icons.bolt, color: Color(0xFFB9FF2B), size: 26),
+            SizedBox(width: 8),
+            Text(
+              'AI Fitness Coach',
+              style: TextStyle(
+                color: Color(0xFFB9FF2B),
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
         backgroundColor: const Color(0xFF0D0D0D),
-        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Column(
@@ -175,13 +184,13 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: _isLoading ? Colors.transparent : const Color(0xFFFF5E00), // Updated to Orange
+                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B), // Volt Green Button
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
                     icon: Icon(
                       Icons.send,
-                      color: _isLoading ? Colors.grey : Colors.white,
+                      color: _isLoading ? Colors.grey : Colors.black, // Black icon for contrast
                     ),
                     onPressed: _isLoading ? null : _sendMessage,
                   ),
@@ -236,7 +245,7 @@ class _ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A), // Orange user bubble
+          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A), // Volt Green user bubble
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -261,7 +270,7 @@ class _ChatBubble extends StatelessWidget {
             ? Text(
                 text,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: Colors.black, // Dark text on light green bubble
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
