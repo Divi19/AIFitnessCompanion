@@ -17,7 +17,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
-  // Updated to dynamic to hold the 'isStreaming' boolean flag
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
@@ -35,7 +34,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     _controller.clear();
     _scrollToBottom();
 
-    // Extract the conversation history BEFORE the current question
     final previousMessages = _messages.sublist(0, _messages.length - 1)
         .map((m) => {'role': m['role'] as String, 'text': m['text'] as String})
         .toList();
@@ -56,7 +54,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
         setState(() {
           if (isFirstChunk) {
             _isLoading = false;
-            // Initialize the assistant message with streaming set to true
             _messages.add({'role': 'assistant', 'text': chunk, 'isStreaming': true});
             isFirstChunk = false;
           } else {
@@ -65,7 +62,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
             _messages[lastIndex] = {
               'role': 'assistant',
               'text': currentText + chunk,
-              'isStreaming': true // Still streaming
+              'isStreaming': true 
             };
           }
         });
@@ -75,7 +72,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
         }
       }
 
-      // Stream is fully complete, trigger the UI to parse cards if applicable
       setState(() {
         final lastIndex = _messages.length - 1;
         _messages[lastIndex]['isStreaming'] = false;
@@ -212,14 +208,12 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Check if the AI is generating JSON output to hide the raw code
     final isJsonFormat = text.trimLeft().startsWith('[') || text.trimLeft().startsWith('```json');
     
     if (!isUser && isStreaming && isJsonFormat) {
       return const _CardGenerationPlaceholder();
     }
 
-    // 2. Once streaming is done, try to parse it as interactive cards
     if (!isUser && !isStreaming) {
       final cleanedText = text.replaceAll('```json', '').replaceAll('```', '').trim();
       if (cleanedText.startsWith('[')) {
@@ -229,13 +223,10 @@ class _ChatBubble extends StatelessWidget {
             final cardsData = parsed.cast<Map<String, dynamic>>();
             return _CardDeck(cards: cardsData);
           }
-        } catch (_) {
-          // If JSON parsing fails, fall through to render as standard Markdown
-        }
+        } catch (_) {}
       }
     }
 
-    // 3. Standard Text / Markdown Bubble Fallback
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -286,17 +277,6 @@ class _ChatBubble extends StatelessWidget {
                   strong:     const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                   em:         const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
                   listBullet: const TextStyle(color: Color(0xFFB9FF2B), fontSize: 15),
-                  code:       const TextStyle(color: Color(0xFFB9FF2B), fontSize: 13, fontFamily: 'monospace'),
-                  codeblockDecoration: BoxDecoration(
-                    color: const Color(0xFF111111),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    color: const Color(0xFFFF5E00).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(6),
-                    border: const Border(left: BorderSide(color: Color(0xFFFF5E00), width: 3)),
-                  ),
-                  blockquote: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ),
       ),
@@ -304,96 +284,166 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-// NEW: Swipeable Card Deck Widget
-class _CardDeck extends StatelessWidget {
+// ── NEW: COMPLETELY REDESIGNED PREMIUM CARD DECK ────────────────────────────
+class _CardDeck extends StatefulWidget {
   final List<Map<String, dynamic>> cards;
 
   const _CardDeck({required this.cards});
 
   @override
+  State<_CardDeck> createState() => _CardDeckState();
+}
+
+class _CardDeckState extends State<_CardDeck> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      height: 240, // Fixed height for the card swiper
-      child: PageView.builder(
-        controller: PageController(viewportFraction: 0.85),
-        padEnds: false,
-        itemCount: cards.length,
-        itemBuilder: (context, index) {
-          final card = cards[index];
-          // Flexible key extraction to handle different AI JSON formats
-          final title = card['title'] ?? card['name'] ?? card['step'] ?? 'Detail';
-          final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
-          final badge = card['badge'] ?? card['impact'] ?? card['muscle_group'] ?? card['confidence'];
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      height: 340, // Taller, more engaging canvas
+      child: Column(
+        children: [
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (int page) {
+                setState(() {
+                  _currentPage = page;
+                });
+              },
+              itemCount: widget.cards.length,
+              itemBuilder: (context, index) {
+                final card = widget.cards[index];
+                final title = card['title'] ?? card['name'] ?? card['step'] ?? 'Detail';
+                final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
+                final badge = card['badge'] ?? card['impact'] ?? card['muscle_group'] ?? card['confidence'];
 
-          return Container(
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.8), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF5E00).withOpacity(0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (badge != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFB9FF2B).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFB9FF2B)),
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4), 
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF2A2A2A), // Lighter dark grey
+                        Color(0xFF111111), // Deep grey
+                      ],
                     ),
-                    child: Text(
-                      badge.toString().toUpperCase(),
-                      style: const TextStyle(color: Color(0xFFB9FF2B), fontSize: 10, fontWeight: FontWeight.bold),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: const Color(0xFFB9FF2B).withOpacity(0.5), 
+                      width: 1.5
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      )
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                ],
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Text(
-                      description,
-                      style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top Row: High-Contrast Badge and Icon
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          if (badge != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFB9FF2B), // Solid Volt Green
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                badge.toString().toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.black, // Inverted for sharp contrast
+                                  fontSize: 11, 
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          const Icon(Icons.fitness_center, color: Color(0xFFFF5E00), size: 24),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Title
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white, 
+                          fontSize: 22, 
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Divider(color: Colors.white24, height: 1),
+                      ),
+                      // Scrollable Description Area
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Text(
+                            description,
+                            style: const TextStyle(
+                              color: Colors.white70, 
+                              fontSize: 15, 
+                              height: 1.6,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Elegant Animated Dot Indicator
+          if (widget.cards.length > 1)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.cards.length,
+                (index) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  height: 6,
+                  width: _currentPage == index ? 24 : 8, // Pill shape for active card
+                  decoration: BoxDecoration(
+                    color: _currentPage == index 
+                        ? const Color(0xFFB9FF2B) 
+                        : Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${index + 1} / ${cards.length}',
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
-                    ),
-                  ],
-                )
-              ],
+              ),
             ),
-          );
-        },
+        ],
       ),
     );
   }
 }
 
-// NEW: Placeholder while JSON is streaming
 class _CardGenerationPlaceholder extends StatelessWidget {
   const _CardGenerationPlaceholder();
 
@@ -402,26 +452,29 @@ class _CardGenerationPlaceholder extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(4),
-            bottomRight: Radius.circular(16),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2A2A2A), Color(0xFF111111)],
           ),
-          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.4), width: 1.5),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.view_carousel, color: Color(0xFFB9FF2B), size: 20),
-            SizedBox(width: 12),
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5E00)),
+            ),
+            SizedBox(width: 16),
             Text(
-              'Generating interactive cards...',
-              style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+              'Designing custom plan...',
+              style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 15),
             ),
           ],
         ),
@@ -449,14 +502,6 @@ class _TypingIndicator extends StatelessWidget {
             bottomRight: Radius.circular(16),
           ),
           border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF5E00).withOpacity(0.12),
-              blurRadius: 12,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -464,10 +509,7 @@ class _TypingIndicator extends StatelessWidget {
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Color(0xFFFF5E00),
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5E00)),
             ),
             SizedBox(width: 12),
             Text(
