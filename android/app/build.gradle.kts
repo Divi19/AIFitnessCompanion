@@ -27,7 +27,7 @@ android {
         applicationId = "com.example.ai_fitness_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -44,4 +44,27 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // QuickPose lifecycle support
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
+    
+    // CameraX (required by QuickPose)
+    val camerax_version = "1.4.1"
+    implementation("androidx.camera:camera-core:$camerax_version")
+    implementation("androidx.camera:camera-camera2:$camerax_version")
+    implementation("androidx.camera:camera-lifecycle:$camerax_version")
+    implementation("androidx.camera:camera-view:$camerax_version")
+    
+    // QuickPose dependencies
+    implementation("com.google.flogger:flogger:0.8") 
+    implementation("com.google.flogger:flogger-system-backend:0.8")
+    implementation("com.google.guava:guava:31.1-android")
+    implementation("com.google.protobuf:protobuf-javalite:3.21.12")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.16.3")
+    
+    // QuickPose SDK — core packages
+    implementation("ai.quickpose:quickpose-mp:0.4")
+    implementation("ai.quickpose:quickpose-core:0.17")
 }
