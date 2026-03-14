@@ -109,17 +109,18 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
+      // ── KEY FIX: Use a Stack with Visibility instead of IndexedStack
+      // with conditional rendering. This keeps WorkoutTrackerScreen alive
+      // in the widget tree at all times so the native QuickPose view is
+      // never disposed when switching tabs. Visibility hides it visually
+      // and IgnorePointer blocks touches when not on that tab.
+      body: Stack(
         children: [
-          const HomeDashboardTab(),
-          const NutritionAssistantScreen(),
-          // Camera is only active when this tab is selected — avoids resource leak
-          _currentIndex == 2
-              ? const WorkoutTrackerScreen()
-              : const SizedBox(),
-          const MealTrackerScreen(), // NEW 4TH TAB
-          const ProfileScreen(),
+          _buildTab(0, const HomeDashboardTab()),
+          _buildTab(1, const NutritionAssistantScreen()),
+          _buildTab(2, const WorkoutTrackerScreen()),
+          _buildTab(3, const MealTrackerScreen()),
+          _buildTab(4, const ProfileScreen()),
         ],
       ),
       bottomNavigationBar: Container(
@@ -140,13 +141,28 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
             BottomNavigationBarItem(
                 icon: Icon(Icons.chat_bubble), label: 'Assistant'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.camera_alt), label: 'Pose'), // RENAMED
+                icon: Icon(Icons.camera_alt), label: 'Pose'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.restaurant), label: 'Meals'), // NEW TAB
+                icon: Icon(Icons.restaurant), label: 'Meals'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
+      ),
+    );
+  }
+
+  // Helper that shows a tab when selected and hides it otherwise,
+  // but crucially never removes it from the tree so native views stay alive.
+  Widget _buildTab(int index, Widget child) {
+    return Visibility(
+      visible: _currentIndex == index,
+      maintainState: true,   // keep state alive when hidden
+      maintainAnimation: true,
+      maintainSize: true,
+      child: IgnorePointer(
+        ignoring: _currentIndex != index,
+        child: child,
       ),
     );
   }
@@ -164,7 +180,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
   bool step1 = false;
   bool step2 = false;
 
-  // NEW: Function to show dialog and update fatigue score in Firestore
   Future<void> _updateFatigue(BuildContext context, String uid, int currentFatigue) async {
     int? newFatigue = await showDialog<int>(
       context: context,
@@ -206,7 +221,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, tempFatigue),
-                  child: const Text('Save', style: TextStyle(color: Color(0xFFB9FF2B), fontWeight: FontWeight.bold)),
+                  child: const Text('Save',
+                      style: TextStyle(
+                          color: Color(0xFFB9FF2B), fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -216,9 +233,10 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
     );
 
     if (newFatigue != null && newFatigue != currentFatigue) {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'fatigue_score': newFatigue,
-      });
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'fatigue_score': newFatigue});
     }
   }
 
@@ -235,8 +253,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
         builder: (context, userSnapshot) {
           if (!userSnapshot.hasData) {
             return const Center(
-                child: CircularProgressIndicator(
-                    color: Color(0xFFB9FF2B)));
+                child: CircularProgressIndicator(color: Color(0xFFB9FF2B)));
           }
 
           final data =
@@ -250,14 +267,15 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
           final healthInsights =
               data['health_insights'] as Map<String, dynamic>? ?? {};
 
-          final currentWeightStr = bodyStats['weight']?.toString() ?? '-- kg';
-          final unit = currentWeightStr.contains('lbs') ? 'lbs' : 'kg';
+          final currentWeightStr =
+              bodyStats['weight']?.toString() ?? '-- kg';
+          final unit =
+              currentWeightStr.contains('lbs') ? 'lbs' : 'kg';
 
           final targetWeightRaw = bodyStats['target_weight']?.toString();
-          
-          //Check if the database value already contains 'kg' or 'lbs'
           final targetWeightStr = targetWeightRaw != null
-              ? (targetWeightRaw.contains('kg') || targetWeightRaw.contains('lbs')
+              ? (targetWeightRaw.contains('kg') ||
+                      targetWeightRaw.contains('lbs')
                   ? targetWeightRaw
                   : '$targetWeightRaw $unit')
               : currentWeightStr;
@@ -269,38 +287,35 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               ? const Color(0xFFFF5E00)
               : const Color(0xFFB9FF2B);
 
-          // Get the start of today for our meal query
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
 
-          // SECOND STREAM: Fetching today's consumed meals dynamically
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('meals')
                 .doc(uid)
                 .collection('logs')
-                .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(today))
+                .where('timestamp',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(today))
                 .snapshots(),
             builder: (context, mealSnapshot) {
-              
-              // Calculate dynamic intake from the snapshot
               double totalCaloriesDouble = 0;
               if (mealSnapshot.hasData) {
                 for (var doc in mealSnapshot.data!.docs) {
                   final mealData = doc.data() as Map<String, dynamic>;
-                  totalCaloriesDouble += (mealData['calories'] as num?)?.toDouble() ?? 0.0;
+                  totalCaloriesDouble +=
+                      (mealData['calories'] as num?)?.toDouble() ?? 0.0;
                 }
               }
               final int currentIntake = totalCaloriesDouble.round();
 
-              // Calculate progress bar logic
-              double calorieProgress =
-                  currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
+              double calorieProgress = currentIntake /
+                  (recommendedCalories > 0 ? recommendedCalories : 1);
               if (calorieProgress > 1.0) calorieProgress = 1.0;
 
               return SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -339,11 +354,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         color: const Color(0xFF1A1A1A),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                            color:
+                                const Color(0xFFB9FF2B).withOpacity(0.5),
                             width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFB9FF2B).withOpacity(0.15),
+                            color:
+                                const Color(0xFFB9FF2B).withOpacity(0.15),
                             blurRadius: 30,
                             spreadRadius: 2,
                           ),
@@ -394,15 +411,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                           CheckboxListTile(
                             title: Text('hit 10k steps',
                                 style: TextStyle(
-                                  color: step1
-                                      ? Colors.white38
-                                      : Colors.white,
+                                  color:
+                                      step1 ? Colors.white38 : Colors.white,
                                   fontWeight: FontWeight.bold,
                                   decoration: step1
                                       ? TextDecoration.lineThrough
                                       : null,
-                                  decorationColor:
-                                      const Color(0xFFFF5E00),
+                                  decorationColor: const Color(0xFFFF5E00),
                                 )),
                             value: step1,
                             onChanged: (val) =>
@@ -418,15 +433,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                           CheckboxListTile(
                             title: Text('HIIT workout',
                                 style: TextStyle(
-                                  color: step2
-                                      ? Colors.white38
-                                      : Colors.white,
+                                  color:
+                                      step2 ? Colors.white38 : Colors.white,
                                   fontWeight: FontWeight.bold,
                                   decoration: step2
                                       ? TextDecoration.lineThrough
                                       : null,
-                                  decorationColor:
-                                      const Color(0xFFFF5E00),
+                                  decorationColor: const Color(0xFFFF5E00),
                                 )),
                             value: step2,
                             onChanged: (val) =>
@@ -459,7 +472,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF5E00).withOpacity(0.3),
+                            color:
+                                const Color(0xFFFF5E00).withOpacity(0.3),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
@@ -500,13 +514,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Calories Progress Bar (COLORS SWAPPED)
+                    // Calories Progress Bar
                     const Text(
                       "Calories Intake:",
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFB9FF2B)), // Changed to Volt Green
+                          color: Color(0xFFB9FF2B)),
                     ),
                     const SizedBox(height: 16),
 
@@ -516,9 +530,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         value: calorieProgress,
                         minHeight: 24,
                         backgroundColor:
-                            const Color(0xFFFF5E00).withOpacity(0.15), // Changed to Translucent Orange
+                            const Color(0xFFFF5E00).withOpacity(0.15),
                         valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFFFF5E00)), // Changed to Solid Orange
+                            Color(0xFFFF5E00)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -539,21 +553,26 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     ),
 
                     const SizedBox(height: 16),
-                    
-                    // SCAN MEAL BUTTON
+
+                    // Scan Meal Button
                     ElevatedButton.icon(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const MealTrackerScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const MealTrackerScreen()),
                       ),
                       icon: const Icon(Icons.camera_alt, size: 20),
-                      label: const Text('Scan a Meal', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text('Scan a Meal',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A1A1A), 
-                        foregroundColor: const Color(0xFFFF5E00), 
-                        side: BorderSide(color: const Color(0xFFFF5E00).withOpacity(0.5)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        backgroundColor: const Color(0xFF1A1A1A),
+                        foregroundColor: const Color(0xFFFF5E00),
+                        side: BorderSide(
+                            color: const Color(0xFFFF5E00).withOpacity(0.5)),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
 
@@ -569,8 +588,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                             title: 'Day Streak',
                             value: '$streak',
                             icon: Icons.local_fire_department,
-                            bgColor:
-                                const Color(0xFFFF5E00).withOpacity(0.15),
+                            bgColor: const Color(0xFFFF5E00).withOpacity(0.15),
                             textColor: const Color(0xFFFF5E00),
                             borderColor:
                                 const Color(0xFFFF5E00).withOpacity(0.5),
@@ -580,13 +598,18 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         Expanded(
                           child: _buildVitalCard(
                             title: 'Fatigue',
-                            subtitle: 'Tap to update', // ADDED EXPLICIT INSTRUCTION
+                            subtitle: 'Tap to update',
                             value: '$fatigue/10',
                             icon: Icons.battery_charging_full,
                             bgColor: fatigueColor.withOpacity(0.15),
                             textColor: fatigueColor,
                             borderColor: fatigueColor.withOpacity(0.5),
-                            onTap: () => _updateFatigue(context, uid, fatigue is int ? fatigue : (fatigue as num).toInt()), // ADDED ONTAP ACTION
+                            onTap: () => _updateFatigue(
+                                context,
+                                uid,
+                                fatigue is int
+                                    ? fatigue
+                                    : (fatigue as num).toInt()),
                           ),
                         ),
                       ],
@@ -596,14 +619,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   ],
                 ),
               );
-            }
+            },
           );
         },
       ),
     );
   }
 
-  // ADDED ONTAP OPTION & SUBTITLE TO HELPER
   Widget _buildVitalCard({
     required String title,
     required String value,
