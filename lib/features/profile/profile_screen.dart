@@ -9,24 +9,41 @@ class ProfileScreen extends StatelessWidget {
 
   Future<void> _signOut(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
+    // Navigate back to login/auth wrapper to avoid null user crashes
+    if (context.mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser!;
+    // Check if user is null to prevent '!' operator crashes
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0D0D0D),
+        body: Center(child: Text('Not logged in', style: TextStyle(color: Colors.white))),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B)));
+          }
+
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+             return const Center(child: Text('Profile not found', style: TextStyle(color: Colors.white)));
           }
 
           final data      = snapshot.data!.data() as Map<String, dynamic>? ?? {};
@@ -44,7 +61,7 @@ class ProfileScreen extends StatelessWidget {
                     radius: 40,
                     backgroundColor: const Color(0xFF1A1A1A),
                     child: Text(
-                      (data['name'] ?? 'U').substring(0, 1).toUpperCase(),
+                      (data['name'] ?? 'U').toString().substring(0, 1).toUpperCase(),
                       style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
@@ -66,11 +83,12 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 40),
 
                 // ── Info Cards ────────────────────────────────────────────
-                _buildInfoSection('Current Goal', goal, Icons.flag),
+                // Added .toString() to prevent type mismatch crashes
+                _buildInfoSection('Current Goal', goal.toString(), Icons.flag),
                 const SizedBox(height: 16),
-                _buildInfoSection('Weight', bodyStats['weight'] ?? '-', Icons.monitor_weight),
+                _buildInfoSection('Weight', bodyStats['weight']?.toString() ?? '-', Icons.monitor_weight),
                 const SizedBox(height: 16),
-                _buildInfoSection('Height', bodyStats['height'] ?? '-', Icons.height),
+                _buildInfoSection('Height', bodyStats['height']?.toString() ?? '-', Icons.height),
 
                 const SizedBox(height: 32),
 
@@ -128,7 +146,6 @@ class ProfileScreen extends StatelessWidget {
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 80,
@@ -138,7 +155,6 @@ class ProfileScreen extends StatelessWidget {
           );
         }
 
-        // No plans yet
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
@@ -176,7 +192,6 @@ class ProfileScreen extends StatelessWidget {
           );
         }
 
-        // Has plan — show the most recent one
         final doc        = snapshot.data!.docs.first;
         final plan       = doc.data() as Map<String, dynamic>;
         final planId     = doc.id;
@@ -188,7 +203,6 @@ class ProfileScreen extends StatelessWidget {
         final createdAt  = plan['createdAt']   as Timestamp?;
         final expiresAt  = plan['expiresAt']   as Timestamp?;
 
-        // Compute how many days remain
         String expiryLabel = '';
         bool   isExpired   = false;
         if (expiresAt != null) {
@@ -206,7 +220,6 @@ class ProfileScreen extends StatelessWidget {
         }
 
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Section header
           Row(children: [
             Container(
               width: 3, height: 18,
@@ -224,7 +237,6 @@ class ProfileScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 14),
 
-          // Plan card
           GestureDetector(
             onTap: () => Navigator.push(
               context,
@@ -246,20 +258,10 @@ class ProfileScreen extends StatelessWidget {
                       ? Colors.red.withOpacity(0.4)
                       : const Color(0xFFFF5E00).withOpacity(0.4),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isExpired
-                        ? Colors.red.withOpacity(0.04)
-                        : const Color(0xFFFF5E00).withOpacity(0.06),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                  ),
-                ],
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                // Top row — goal + status badge
                 Row(children: [
                   Container(
                     padding: const EdgeInsets.all(9),
@@ -280,7 +282,6 @@ class ProfileScreen extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ),
-                  // Expiry badge
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -289,11 +290,6 @@ class ProfileScreen extends StatelessWidget {
                           ? Colors.red.withOpacity(0.15)
                           : const Color(0xFFB9FF2B).withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isExpired
-                            ? Colors.red.withOpacity(0.5)
-                            : const Color(0xFFB9FF2B).withOpacity(0.4),
-                      ),
                     ),
                     child: Text(
                       isExpired ? 'Expired' : 'Active',
@@ -311,69 +307,35 @@ class ProfileScreen extends StatelessWidget {
                 const Divider(color: Colors.white10, height: 1),
                 const SizedBox(height: 14),
 
-                // Stats row
                 Row(children: [
-                  _planStat(Icons.calendar_today_outlined,
-                      '${days ?? '?'} days/wk'),
+                  _planStat(Icons.calendar_today_outlined, '${days ?? '?'} days/wk'),
                   const SizedBox(width: 20),
                   _planStat(Icons.timer_outlined, duration),
                   const SizedBox(width: 20),
                   _planStat(Icons.bar_chart, level),
-                  if (weeks != null) ...[
-                    const SizedBox(width: 20),
-                    _planStat(Icons.date_range_outlined, '${weeks}w plan'),
-                  ],
                 ]),
 
                 const SizedBox(height: 12),
 
-                // Expiry line
                 if (expiryLabel.isNotEmpty)
                   Row(children: [
                     Icon(
-                      isExpired
-                          ? Icons.warning_amber_rounded
-                          : Icons.access_time_outlined,
+                      isExpired ? Icons.warning_amber_rounded : Icons.access_time_outlined,
                       color: isExpired ? Colors.redAccent : Colors.white38,
                       size: 14,
                     ),
                     const SizedBox(width: 6),
                     Text(expiryLabel,
                         style: TextStyle(
-                            color:
-                                isExpired ? Colors.redAccent : Colors.white38,
+                            color: isExpired ? Colors.redAccent : Colors.white38,
                             fontSize: 12)),
                     const Spacer(),
                     const Text('Tap to view →',
-                        style:
-                            TextStyle(color: Color(0xFFFF5E00), fontSize: 12, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: Color(0xFFFF5E00), fontSize: 12, fontWeight: FontWeight.w600)),
                   ]),
               ]),
             ),
           ),
-
-          // Expired CTA
-          if (isExpired) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withOpacity(0.25)),
-              ),
-              child: Row(children: [
-                const Icon(Icons.refresh, color: Colors.redAccent, size: 16),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Your plan has expired. Generate a new one for continued progress.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ),
-              ]),
-            ),
-          ],
         ]);
       },
     );
@@ -383,8 +345,7 @@ class ProfileScreen extends StatelessWidget {
     return Row(children: [
       Icon(icon, color: Colors.white38, size: 14),
       const SizedBox(width: 4),
-      Text(label,
-          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
     ]);
   }
 
@@ -398,16 +359,19 @@ class ProfileScreen extends StatelessWidget {
       child: Row(children: [
         Icon(icon, color: const Color(0xFFB9FF2B), size: 24),
         const SizedBox(width: 16),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
-              style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
-        ]),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+          ]),
+        ),
       ]),
     );
   }
