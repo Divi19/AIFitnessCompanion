@@ -1,20 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart'; // NEW
+import '../services/quickpose_service.dart';
 
-import '../services/pose_service.dart'; // Our angle/rep/form logic
-import '../widgets/pose_painter.dart';  // Skeleton overlay painter
-
-/// The main workout tracking screen.
-///
-/// Responsibilities:
-///   1. Initialise and manage the device camera
-///   2. Stream camera frames into ML Kit via [PoseService]
-///   3. Render the live preview with a skeleton overlay ([PosePainter])
-///   4. Display real-time rep count and form feedback to the user
-///   5. Let the user switch between exercises via a top pill-selector
 class WorkoutTrackerScreen extends StatefulWidget {
-  const WorkoutTrackerScreen({super.key});
+  const WorkoutTrackerScreen({Key? key}) : super(key: key);
 
   @override
   State<WorkoutTrackerScreen> createState() => _WorkoutTrackerScreenState();
@@ -22,328 +12,303 @@ class WorkoutTrackerScreen extends StatefulWidget {
 
 class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen> {
 
-  // Camera state 
-  CameraController? _cameraController;
-  List<CameraDescription> _cameras = []; // All available cameras on the device
-  bool _isCameraInitialized = false;     // Guards the preview widget build
+  final QuickPoseService _quickPoseService = QuickPoseService();
 
-  /// Index of the active camera.
-  /// 0 = rear camera, 1 = front (selfie) camera.
-  /// Default to front camera so the user can see themselves working out.
-  int _selectedCameraIndex = 1;
+  // The native view type — must match VIEW_TYPE in MainActivity.kt
+  static const String _viewType = 'com.example.ai_fitness_app/quickpose_view';
 
-  // Pose detection state 
-  final PoseService _poseService = PoseService();
+  // State
+  bool   _hasPermission = false; // NEW
+  int    _repCount      = 0;
+  String _feedback      = '';
+  String _status        = 'loading';
+  String _exerciseState = '';
+  int    _fps           = 0;
 
-  /// The latest set of poses returned by ML Kit for the current frame.
-  List<Pose> _poses = [];
+  // Currently selected exercise
+  String _selectedExercise = 'squat';
 
-  /// The pixel dimensions of the camera image last processed by ML Kit.
-  /// Needed by PosePainter to scale landmarks to screen coordinates.
-  Size _imageSize = Size.zero;
-
-  /// Prevents queueing multiple ML Kit calls simultaneously.
-  /// If the detector is still processing the previous frame we skip the
-  /// current frame rather than building up a backlog that causes lag.
-  bool _isDetecting = false;
-
-  // ── Exercise / feedback state 
-  ExerciseType _selectedExercise = ExerciseType.squat; // Active exercise
-  FormFeedback? _lastFeedback;  // Most recent coaching message
-  int _repCount = 0;            // Displayed rep count
-
-  // Convenience list for building the exercise selector UI
-  final List<ExerciseType> _exercises = ExerciseType.values;
-
-  // Lifecycle 
+  // Supported exercises — label shown to user : key sent to native
+  final Map<String, String> _exercises = {
+    'Squat':        'squat',
+    'Push Up':      'pushup',
+    'Bicep Curl':   'bicep_curl',
+    'Jumping Jack': 'jumping_jack',
+    'Left Lunge':   'lunge_left',
+    'Right Lunge':  'lunge_right',
+    'Sit Up':       'sit_up',
+    'Plank':        'plank',
+    'Glute Bridge': 'glute_bridge',
+  };
 
   @override
   void initState() {
     super.initState();
-    _initCamera(); // Start camera as soon as the screen is created
+    _requestCameraPermission(); // NEW: Ask for permission before doing anything
   }
 
-  /// Discovers available cameras, picks the desired one, initialises the
-  /// controller, then starts the image stream for ML Kit.
-  Future<void> _initCamera() async {
-    _cameras = await availableCameras();
-    if (_cameras.isEmpty) return; // Safety: no camera available
-
-    // Clamp index so it never exceeds the number of cameras on this device
-    final camera = _cameras[_selectedCameraIndex.clamp(0, _cameras.length - 1)];
-
-    _cameraController = CameraController(
-      camera,
-      ResolutionPreset.medium, // 720p — balances quality vs ML Kit speed
-      enableAudio: false,       // We don't need audio
-      // NV21 is the format ML Kit expects on Android
-      imageFormatGroup: ImageFormatGroup.nv21,
-    );
-
-    await _cameraController!.initialize();
-    if (!mounted) return; // Widget may have been disposed while we awaited
-
-    setState(() => _isCameraInitialized = true);
-
-    // Begin streaming frames — _processCameraImage is called for every frame
-    _cameraController!.startImageStream(_processCameraImage);
+  // NEW: Permission request logic
+  Future<void> _requestCameraPermission() async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) {
+      setState(() {
+        _hasPermission = true;
+      });
+      _listenToResults(); // Safe to start listening now
+    } else {
+      debugPrint('Camera permission denied by user.');
+      // Keep _hasPermission as false to prevent the crash
+    }
   }
 
-  /// Called by the camera plugin for every frame.
-  ///
-  /// Flow:
-  ///   1. Skip if ML Kit is still busy with the previous frame
-  ///   2. Wrap the raw frame bytes in an [InputImage] that ML Kit understands
-  ///   3. Run pose detection via [PoseService]
-  ///   4. Update UI state with the new poses, feedback, and rep count
-  void _processCameraImage(CameraImage image) async {
-    // Skip this frame if the detector hasn't finished the previous one
-    if (_isDetecting) return;
-    _isDetecting = true;
-
-    try {
-      final camera = _cameras[_selectedCameraIndex.clamp(0, _cameras.length - 1)];
-
-      // Convert the raw sensor rotation value to the ML Kit enum
-      final rotation =
-          InputImageRotationValue.fromRawValue(camera.sensorOrientation)
-          ?? InputImageRotation.rotation0deg;
-
-      // Build the InputImage from the raw NV21 bytes in the first camera plane
-      final inputImage = InputImage.fromBytes(
-        bytes: image.planes[0].bytes,
-        metadata: InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: rotation,
-          format: InputImageFormat.nv21,
-          bytesPerRow: image.planes[0].bytesPerRow,
-        ),
-      );
-
-      // Run ML Kit pose detection
-      final poses = await _poseService.detectPose(inputImage);
-
-      // Update the UI on the main thread
-      if (mounted) {
+  void _listenToResults() {
+    _quickPoseService.resultsStream.listen(
+      (data) {
+        if (!mounted) return;
         setState(() {
-          _poses     = poses;
-          _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-
-          if (poses.isNotEmpty) {
-            // Assess form and update rep count for the selected exercise
-            _lastFeedback = _poseService.assessForm(_selectedExercise, poses.first);
-            _repCount     = _poseService.getRepCount(_selectedExercise);
-          }
+          _repCount      = (data['repCount']      as int?)    ?? _repCount;
+          _feedback      = (data['feedback']      as String?) ?? '';
+          _status        = (data['status']        as String?) ?? 'loading';
+          _exerciseState = (data['exerciseState'] as String?) ?? '';
+          _fps           = (data['fps']           as int?)    ?? 0;
         });
-      }
-    } finally {
-      // Always release the lock so the next frame can be processed
-      _isDetecting = false;
-    }
+      },
+      onError: (error) {
+        debugPrint('QuickPose stream error: $error');
+      },
+    );
   }
 
-  // Exercise switching 
-
-  /// Switches the active exercise and clears stale feedback.
-  /// Rep counts for the previously selected exercise are preserved
-  /// so the user can switch back without losing their count.
-  void _switchExercise(ExerciseType type) {
+  Future<void> _switchExercise(String exerciseKey) async {
     setState(() {
-      _selectedExercise = type;
-      _lastFeedback     = null; // Clear old feedback until next detection
-      _repCount         = _poseService.getRepCount(type); // Restore saved count
+      _selectedExercise = exerciseKey;
+      _repCount         = 0;         
+      _feedback         = '';
+      _exerciseState    = '';
     });
+    await _quickPoseService.switchExercise(exerciseKey);
   }
-
-  /// Resets the rep counter for the current exercise to zero.
-  void _resetReps() {
-    _poseService.resetReps(_selectedExercise);
-    setState(() => _repCount = 0);
-  }
-
-  /// Returns a display-friendly name for each exercise type.
-  String _exerciseName(ExerciseType type) {
-    switch (type) {
-      case ExerciseType.squat:     return 'Squat';
-      case ExerciseType.pushup:    return 'Push-up';
-      case ExerciseType.bicepCurl: return 'Bicep Curl';
-    }
-  }
-
-  // Cleanup 
 
   @override
   void dispose() {
-    // Stop streaming frames before disposing the controller to avoid
-    // callbacks arriving after the widget is gone
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
-
-    // Release the native ML Kit detector resources
-    _poseService.dispose();
-
+    _quickPoseService.stopCamera();
     super.dispose();
   }
-
-  // Build 
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0D),
-        title: const Text(
-          'Workout Tracker',
-          style: TextStyle(color: Colors.white),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Column(
+      backgroundColor: Colors.black,
+      body: Stack(
         children: [
 
-          // Exercise selector (horizontal pill row) 
-          // Lets the user pick which exercise to track without leaving
-          // the camera screen
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              children: _exercises.map((ex) {
-                final isSelected = ex == _selectedExercise;
-                return GestureDetector(
-                  onTap: () => _switchExercise(ex),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      // Highlight the active exercise in green
-                      color: isSelected
-                          ? const Color(0xFFB9FF2B)
-                          : const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _exerciseName(ex),
-                      style: TextStyle(
-                        color: isSelected ? Colors.black : Colors.white,
-                        fontWeight: FontWeight.bold,
+          // ── 1. Native QuickPose Camera View (full screen) ───────────────
+          // NEW: Only render the AndroidView if permission is granted
+          if (_hasPermission)
+            Positioned.fill(
+              child: AndroidView(
+                viewType: _viewType,
+                layoutDirection: TextDirection.ltr,
+                creationParamsCodec: const StandardMessageCodec(),
+              ),
+            )
+          else
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Color(0xFFB9FF2B)),
+                      SizedBox(height: 16),
+                      Text('Waiting for camera permission...',
+                          style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 2. Top Bar ──────────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: const Icon(Icons.arrow_back_ios,
+                          color: Colors.white, size: 20),
                     ),
                   ),
-                );
-              }).toList(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$_fps fps',
+                      style: const TextStyle(color: Colors.white54,
+                          fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          //  Camera preview + skeleton overlay 
-          Expanded(
-            child: _isCameraInitialized
-                ? LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // Layer 1: live camera feed
-                          CameraPreview(_cameraController!),
-
-                          // Layer 2: skeleton overlay
-                          // Only painted when we have poses and a valid image size
-                          if (_poses.isNotEmpty && _imageSize != Size.zero)
-                            CustomPaint(
-                              painter: PosePainter(
-                                _poses,
-                                _imageSize,
-                                // Tell the painter whether to mirror x coords
-                                isFrontCamera: _selectedCameraIndex == 1,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  )
-                : const Center(
-                    // Shown while the camera controller is initialising
-                    child: CircularProgressIndicator(
-                        color: Color(0xFFB9FF2B)),
-                  ),
-          ),
-
-          // Rep counter + form feedback panel 
-          // Docked at the bottom of the screen so it's always visible
-          Container(
-            color: const Color(0xFF1A1A1A),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
+          // ── 3. Rep Counter (top centre) ─────────────────────────────────
+          Positioned(
+            top: 80,
+            left: 0,
+            right: 0,
+            child: Column(
               children: [
-
-                // Left side: large rep number with reset button
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'REPS',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    Text(
-                      '$_repCount',
-                      style: const TextStyle(
-                        color: Color(0xFFB9FF2B),
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _resetReps,
-                      child: const Text(
-                        'Reset',
-                        style: TextStyle(
-                            color: Color(0xFFFF5E00), fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(width: 20),
-
-                // Right side: coaching feedback card
-                // Card border and background change colour based on form quality
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      // Green tint = good form, orange tint = needs correction
-                      color: _lastFeedback == null
-                          ? Colors.transparent
-                          : _lastFeedback!.isGoodForm
-                              ? const Color(0xFFB9FF2B).withOpacity(0.1)
-                              : const Color(0xFFFF5E00).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _lastFeedback == null
-                            ? Colors.white10
-                            : _lastFeedback!.isGoodForm
-                                ? const Color(0xFFB9FF2B)
-                                : const Color(0xFFFF5E00),
-                      ),
-                    ),
-                    child: Text(
-                      // Default message before a person is detected
-                      _lastFeedback?.message ??
-                          'Get into position to start...',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
+                Text(
+                  '$_repCount',
+                  style: const TextStyle(
+                    color: Color(0xFFB9FF2B), 
+                    fontSize: 80,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
                   ),
+                ),
+                const Text(
+                  'reps',
+                  style: TextStyle(color: Colors.white54, fontSize: 16),
                 ),
               ],
             ),
           ),
 
+          // ── 4. Form Feedback Banner ─────────────────────────────────────
+          if (_feedback.isNotEmpty)
+            Positioned(
+              top: 220,
+              left: 24,
+              right: 24,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF5E00).withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _feedback,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 5. Loading Overlay ──────────────────────────────────────────
+          if (_hasPermission && _status == 'loading')
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Color(0xFFB9FF2B)),
+                      SizedBox(height: 16),
+                      Text('Starting pose detection...',
+                          style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 6. Exercise Selector (bottom) ───────────────────────────────
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 10),
+                    child: Text(
+                      'SELECT EXERCISE',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 44,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: _exercises.entries.map((entry) {
+                        final isSelected = _selectedExercise == entry.value;
+                        return GestureDetector(
+                          onTap: () => _switchExercise(entry.value),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFB9FF2B)
+                                  : Colors.white12,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFB9FF2B)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            child: Text(
+                              entry.key,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.black
+                                    : Colors.white70,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
