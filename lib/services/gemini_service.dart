@@ -4,6 +4,7 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 
+
 class GeminiService {
 
   // ── GENERATION MODEL ──────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ class GeminiService {
 class MealGeminiService {
 
   // NOTE: Move this key to AppConstants and .env before going to production
-  static const String _apiKey = 'AIzaSyC7ukW7XGh9BinYOza2N69f6P0uisDc3IQ';
+  static String get _apiKey => AppConstants.geminiApiKey;
 
   Future<List<Map<String, dynamic>>> classifyMeal(List<int> imageBytes) async {
     const prompt = '''
