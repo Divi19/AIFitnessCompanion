@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 
@@ -257,6 +258,3 @@ Write a 2-3 sentence spoken debrief. Rules:
     return names[exercise] ?? exercise;
   }
 }
-
-// ignore: avoid_print
-void debugPrint(String msg) => print(msg);
