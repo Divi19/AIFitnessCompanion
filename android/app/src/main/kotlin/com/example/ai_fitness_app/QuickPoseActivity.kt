@@ -34,8 +34,17 @@ class QuickPoseActivity : ComponentActivity() {
     // NEW: Camera view is tied strictly to this activity's lifecycle
     private lateinit var cameraView: QuickPoseCameraSwitchView
 
-    private val counter = QuickPoseThresholdCounter()
+    // enterThreshold: signal must reach this HIGH value to start a rep (top of movement)
+    // exitThreshold:  signal must drop to this LOW value to complete a rep (bottom of movement)
+    // Both values are 0-1 normalised. Wider gap = harder to accidentally trigger a rep.
+    private val counter = QuickPoseThresholdCounter(
+        enterThreshold = 0.8f,
+        exitThreshold  = 0.2f
+    )
+    
     private var currentExercise = "squat"
+    private var lastBroadcastedRepCount = 0  // Stores last known count so missed frames don't reset to 0
+    private var lastBroadcastedFeedback  = "" // Stores last known feedback for same reason
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
@@ -163,6 +172,8 @@ class QuickPoseActivity : ComponentActivity() {
         if (newExercise != currentExercise) {
             currentExercise = newExercise
             counter.reset()
+            lastBroadcastedRepCount = 0
+            lastBroadcastedFeedback = ""
             quickPose.stop()
             runOnUiThread {
                 repCountText.text       = "0"
@@ -206,28 +217,45 @@ class QuickPoseActivity : ComponentActivity() {
             quickPose.start(
                 arrayOf(featureFor(exerciseName)),
                 onFrame = { status, _, features, feedback, _ ->
-                    var repCount = 0
-                    features?.forEach { (feature, result) ->
-                        if (feature is Feature.Fitness) {
-                            repCount = counter.count(result.value).count
+                    val statusStr = if (status is Status.Success) "success" else "loading"
+
+                    // Only update rep count if QuickPose actually detected the body this frame.
+                    // If features is null/empty (skeleton lost), we keep the last known count
+                    if (features != null && features.isNotEmpty()) {
+                        features.forEach { (feature, result) ->
+                            if (feature is Feature.Fitness && result.value != null) {
+                                val newCount = counter.count(result.value).count
+                                if (newCount != lastBroadcastedRepCount) {
+                                    // Count changed — update UI and broadcast immediately
+                                    lastBroadcastedRepCount = newCount
+                                    runOnUiThread {
+                                        repCountText.text = newCount.toString()
+                                    }
+                                }
+                            }
                         }
                     }
+                    // If features is null, we intentionally do nothing  UI keeps showing
+                    // lastBroadcastedRepCount which is still displayed from the previous setState
+
+                    // Feedback: only update if it actually changed
                     val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
-                    val statusStr   = if (status is Status.Success) "success" else "loading"
-
-                    runOnUiThread {
-                        repCountText.text = repCount.toString()
-                        if (feedbackMsg.isNotEmpty()) {
-                            feedbackText.text       = feedbackMsg
-                            feedbackText.visibility = View.VISIBLE
-                        } else {
-                            feedbackText.visibility = View.GONE
+                    if (feedbackMsg != lastBroadcastedFeedback) {
+                        lastBroadcastedFeedback = feedbackMsg
+                        runOnUiThread {
+                            if (feedbackMsg.isNotEmpty()) {
+                                feedbackText.text       = feedbackMsg
+                                feedbackText.visibility = View.VISIBLE
+                            } else {
+                                feedbackText.visibility = View.GONE
+                            }
                         }
                     }
 
+                    // Only broadcast when something actually changed reduces noise to Flutter
                     sendBroadcast(Intent(ACTION_RESULT).apply {
-                        putExtra(EXTRA_REP_COUNT, repCount)
-                        putExtra(EXTRA_FEEDBACK,  feedbackMsg)
+                        putExtra(EXTRA_REP_COUNT, lastBroadcastedRepCount)
+                        putExtra(EXTRA_FEEDBACK,  lastBroadcastedFeedback)
                         putExtra(EXTRA_STATUS,    statusStr)
                         setPackage(packageName)
                     })
