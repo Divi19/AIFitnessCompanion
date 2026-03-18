@@ -36,9 +36,17 @@ class QuickPoseActivity : ComponentActivity() {
         const val EXTRA_SESSION_FEEDBACK_VALUES = "session_feedback_values"
 
         // Quality thresholds — sessions below these are silently discarded
-        const val MIN_REPS          = 3
-        const val MIN_DURATION_MS   = 20_000L   // 20 seconds
-        const val MIN_FEEDBACK_COUNT = 5        // at least 5 feedback messages received
+        const val MIN_REPS        = 3
+        const val MIN_DURATION_MS = 20_000L   // 20 seconds
+
+        // Keywords that identify camera setup messages — filtered out of the
+        // feedback map because they are positional instructions, not form corrections.
+        // Using keyword matching so it works even if QuickPose changes exact wording.
+        val SETUP_KEYWORDS = setOf(
+            "back", "closer", "further", "forward", "camera",
+            "centre", "center", "frame", "step", "move", "distance",
+            "right", "left", "position", "align"
+        )
     }
 
     private val quickPose get() = QuickPoseHolder.quickPose
@@ -54,7 +62,6 @@ class QuickPoseActivity : ComponentActivity() {
     private var latestRepCount   = 0
     // Feedback frequency map — key: feedback string, value: occurrence count
     private val feedbackFrequency = mutableMapOf<String, Int>()
-    private var totalFeedbackReceived = 0
 
     // Ghost rep guard
     private var lastRepTime = 0L
@@ -176,11 +183,10 @@ class QuickPoseActivity : ComponentActivity() {
 
     // ── Reset all session tracking data ──────────────────────────────────
     private fun resetSessionData() {
-        sessionStartMs        = System.currentTimeMillis()
-        latestRepCount        = 0
-        totalFeedbackReceived = 0
+        sessionStartMs = System.currentTimeMillis()
+        latestRepCount = 0
         feedbackFrequency.clear()
-        lastRepTime           = 0L
+        lastRepTime    = 0L
         counter.reset()
     }
 
@@ -188,16 +194,13 @@ class QuickPoseActivity : ComponentActivity() {
     private fun broadcastSessionIfValid() {
         val durationMs = System.currentTimeMillis() - sessionStartMs
 
-        val meetsReps     = latestRepCount       >= MIN_REPS
-        val meetsDuration = durationMs            >= MIN_DURATION_MS
-        val meetsFeedback = totalFeedbackReceived >= MIN_FEEDBACK_COUNT
+        val meetsReps     = latestRepCount >= MIN_REPS
+        val meetsDuration = durationMs     >= MIN_DURATION_MS
 
-        println("=== SESSION END: reps=$latestRepCount, duration=${durationMs}ms, " +
-                "feedback=$totalFeedbackReceived ===")
-        println("=== QUALITY CHECK: reps=$meetsReps, duration=$meetsDuration, " +
-                "feedback=$meetsFeedback ===")
+        println("=== SESSION END: reps=$latestRepCount, duration=${durationMs}ms ===")
+        println("=== QUALITY CHECK: reps=$meetsReps, duration=$meetsDuration ===")
 
-        if (!meetsReps || !meetsDuration || !meetsFeedback) {
+        if (!meetsReps || !meetsDuration) {
             println("=== SESSION DISCARDED: below quality threshold ===")
             return
         }
@@ -289,11 +292,17 @@ class QuickPoseActivity : ComponentActivity() {
                     }
 
                     // ── Feedback accumulation ─────────────────────────────
+                    // Filter out camera setup messages — these are positional
+                    // instructions (stand back, move closer etc.) not form
+                    // corrections. They pollute the debrief with useless info.
                     val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
                     if (feedbackMsg.isNotEmpty()) {
-                        totalFeedbackReceived++
-                        feedbackFrequency[feedbackMsg] =
-                            (feedbackFrequency[feedbackMsg] ?: 0) + 1
+                        val lowerMsg = feedbackMsg.lowercase()
+                        val isSetupMessage = SETUP_KEYWORDS.any { lowerMsg.contains(it) }
+                        if (!isSetupMessage) {
+                            feedbackFrequency[feedbackMsg] =
+                                (feedbackFrequency[feedbackMsg] ?: 0) + 1
+                        }
                     }
 
                     val statusStr = if (status is Status.Success) "success" else "loading"
