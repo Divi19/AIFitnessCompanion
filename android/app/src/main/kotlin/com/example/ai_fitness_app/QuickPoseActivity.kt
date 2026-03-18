@@ -21,21 +21,43 @@ import kotlinx.coroutines.launch
 class QuickPoseActivity : ComponentActivity() {
 
     companion object {
-        const val EXTRA_EXERCISE  = "exercise"
-        const val ACTION_RESULT   = "com.example.ai_fitness_app.QUICKPOSE_RESULT"
-        const val EXTRA_REP_COUNT = "rep_count"
-        const val EXTRA_FEEDBACK  = "feedback"
-        const val EXTRA_STATUS    = "status"
+        const val EXTRA_EXERCISE    = "exercise"
+        const val ACTION_RESULT     = "com.example.ai_fitness_app.QUICKPOSE_RESULT"
+        const val ACTION_SESSION    = "com.example.ai_fitness_app.QUICKPOSE_SESSION"
+        const val EXTRA_REP_COUNT   = "rep_count"
+        const val EXTRA_FEEDBACK    = "feedback"
+        const val EXTRA_STATUS      = "status"
+
+        // Session summary extras — broadcast when session ends
+        const val EXTRA_SESSION_EXERCISE        = "session_exercise"
+        const val EXTRA_SESSION_REPS            = "session_reps"
+        const val EXTRA_SESSION_DURATION_MS     = "session_duration_ms"
+        const val EXTRA_SESSION_FEEDBACK_KEYS   = "session_feedback_keys"
+        const val EXTRA_SESSION_FEEDBACK_VALUES = "session_feedback_values"
+
+        // Quality thresholds — sessions below these are silently discarded
+        const val MIN_REPS          = 3
+        const val MIN_DURATION_MS   = 20_000L   // 20 seconds
+        const val MIN_FEEDBACK_COUNT = 5        // at least 5 feedback messages received
     }
 
     private val quickPose get() = QuickPoseHolder.quickPose
         ?: throw IllegalStateException("QuickPose not initialised")
 
-    // NEW: Camera view is tied strictly to this activity's lifecycle
     private lateinit var cameraView: QuickPoseCameraSwitchView
 
     private val counter = QuickPoseThresholdCounter()
     private var currentExercise = "squat"
+
+    // ── Session tracking ──────────────────────────────────────────────────
+    private var sessionStartMs   = 0L
+    private var latestRepCount   = 0
+    // Feedback frequency map — key: feedback string, value: occurrence count
+    private val feedbackFrequency = mutableMapOf<String, Int>()
+    private var totalFeedbackReceived = 0
+
+    // Ghost rep guard
+    private var lastRepTime = 0L
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
@@ -45,12 +67,8 @@ class QuickPoseActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setDecorFitsSystemWindows(false)
-        
         currentExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: "squat"
-        
-        // Initialize the camera view securely inside this Activity context
         cameraView = QuickPoseCameraSwitchView(this, quickPose)
-        
         setContentView(buildUI())
     }
 
@@ -62,21 +80,19 @@ class QuickPoseActivity : ComponentActivity() {
         )
         root.setBackgroundColor(Color.BLACK)
 
-        // Add the locally created camera view directly to the root
         root.addView(cameraView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
 
         // Back button
-        val backBtn = ImageButton(this).apply {
+        root.addView(ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             setBackgroundColor(Color.argb(150, 0, 0, 0))
             setPadding(24, 24, 24, 24)
             contentDescription = "Back"
             setOnClickListener { finishCleanly() }
-        }
-        root.addView(backBtn, FrameLayout.LayoutParams(120, 120).apply {
+        }, FrameLayout.LayoutParams(120, 120).apply {
             gravity = Gravity.TOP or Gravity.START
             topMargin = 80; leftMargin = 32
         })
@@ -135,15 +151,14 @@ class QuickPoseActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        resetSessionData()
         startQuickPose(currentExercise)
     }
 
     override fun onPause() {
         super.onPause()
         quickPose.stop()
-        try {
-            cameraView.stop() // NEW: Explicitly release the camera hardware
-        } catch (e: Exception) {}
+        try { cameraView.stop() } catch (e: Exception) {}
     }
 
     @Deprecated("Deprecated in Java")
@@ -151,25 +166,74 @@ class QuickPoseActivity : ComponentActivity() {
 
     private fun finishCleanly() {
         quickPose.stop()
-        try {
-            cameraView.stop() // NEW: Free the camera lock immediately
-        } catch (e: Exception) {}
+        try { cameraView.stop() } catch (e: Exception) {}
+        broadcastSessionIfValid()
         finish()
+    }
+
+    // ── Reset all session tracking data ──────────────────────────────────
+    private fun resetSessionData() {
+        sessionStartMs        = System.currentTimeMillis()
+        latestRepCount        = 0
+        totalFeedbackReceived = 0
+        feedbackFrequency.clear()
+        lastRepTime           = 0L
+        counter.reset()
+    }
+
+    // ── Check quality thresholds and broadcast session summary if valid ───
+    private fun broadcastSessionIfValid() {
+        val durationMs = System.currentTimeMillis() - sessionStartMs
+
+        val meetsReps     = latestRepCount       >= MIN_REPS
+        val meetsDuration = durationMs            >= MIN_DURATION_MS
+        val meetsFeedback = totalFeedbackReceived >= MIN_FEEDBACK_COUNT
+
+        println("=== SESSION END: reps=$latestRepCount, duration=${durationMs}ms, " +
+                "feedback=$totalFeedbackReceived ===")
+        println("=== QUALITY CHECK: reps=$meetsReps, duration=$meetsDuration, " +
+                "feedback=$meetsFeedback ===")
+
+        if (!meetsReps || !meetsDuration || !meetsFeedback) {
+            println("=== SESSION DISCARDED: below quality threshold ===")
+            return
+        }
+
+        // Flatten the feedback map into two parallel arrays for Intent extras
+        // (Intent doesn't support Map directly)
+        val feedbackKeys   = feedbackFrequency.keys.toTypedArray()
+        val feedbackValues = feedbackFrequency.values.map { it }.toIntArray()
+
+        println("=== SESSION SAVED: broadcasting to Flutter ===")
+
+        sendBroadcast(Intent(ACTION_SESSION).apply {
+            putExtra(EXTRA_SESSION_EXERCISE,        currentExercise)
+            putExtra(EXTRA_SESSION_REPS,            latestRepCount)
+            putExtra(EXTRA_SESSION_DURATION_MS,     durationMs)
+            putExtra(EXTRA_SESSION_FEEDBACK_KEYS,   feedbackKeys)
+            putExtra(EXTRA_SESSION_FEEDBACK_VALUES, feedbackValues)
+            setPackage(packageName)
+        })
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val newExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: return
         if (newExercise != currentExercise) {
-            currentExercise = newExercise
-            counter.reset()
+            // Save the current exercise session before switching
             quickPose.stop()
+            broadcastSessionIfValid()
+
+            currentExercise = newExercise
             runOnUiThread {
                 repCountText.text       = "0"
                 feedbackText.visibility = View.GONE
                 exerciseLabel.text      = exerciseDisplayName(newExercise)
             }
-            lifecycleScope.launch { startQuickPose(newExercise) }
+            lifecycleScope.launch {
+                resetSessionData()
+                startQuickPose(newExercise)
+            }
         }
     }
 
@@ -206,17 +270,34 @@ class QuickPoseActivity : ComponentActivity() {
             quickPose.start(
                 arrayOf(featureFor(exerciseName)),
                 onFrame = { status, _, features, feedback, _ ->
-                    var repCount = 0
+
+                    // ── Rep counting with ghost rep guard ─────────────────
                     features?.forEach { (feature, result) ->
                         if (feature is Feature.Fitness) {
-                            repCount = counter.count(result.value).count
+                            val counterState = counter.count(result.value)
+                            val now = System.currentTimeMillis()
+                            // Only accept a new rep if 500ms has passed since the last one
+                            if (counterState.count > latestRepCount &&
+                                (now - lastRepTime) > 500L) {
+                                latestRepCount = counterState.count
+                                lastRepTime    = now
+                            }
                         }
                     }
-                    val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
-                    val statusStr   = if (status is Status.Success) "success" else "loading"
 
+                    // ── Feedback accumulation ─────────────────────────────
+                    val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
+                    if (feedbackMsg.isNotEmpty()) {
+                        totalFeedbackReceived++
+                        feedbackFrequency[feedbackMsg] =
+                            (feedbackFrequency[feedbackMsg] ?: 0) + 1
+                    }
+
+                    val statusStr = if (status is Status.Success) "success" else "loading"
+
+                    // ── Update UI ─────────────────────────────────────────
                     runOnUiThread {
-                        repCountText.text = repCount.toString()
+                        repCountText.text = latestRepCount.toString()
                         if (feedbackMsg.isNotEmpty()) {
                             feedbackText.text       = feedbackMsg
                             feedbackText.visibility = View.VISIBLE
@@ -225,8 +306,9 @@ class QuickPoseActivity : ComponentActivity() {
                         }
                     }
 
+                    // ── Broadcast live results to Flutter ─────────────────
                     sendBroadcast(Intent(ACTION_RESULT).apply {
-                        putExtra(EXTRA_REP_COUNT, repCount)
+                        putExtra(EXTRA_REP_COUNT, latestRepCount)
                         putExtra(EXTRA_FEEDBACK,  feedbackMsg)
                         putExtra(EXTRA_STATUS,    statusStr)
                         setPackage(packageName)
