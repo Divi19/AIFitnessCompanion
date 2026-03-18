@@ -66,7 +66,10 @@ class QuickPoseActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.setDecorFitsSystemWindows(false)
+        // setDecorFitsSystemWindows requires API 30+ — S9+ runs API 29
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        }
         currentExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: "squat"
         cameraView = QuickPoseCameraSwitchView(this, quickPose)
         setContentView(buildUI())
