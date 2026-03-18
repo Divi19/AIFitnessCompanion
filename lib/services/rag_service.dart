@@ -1,13 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'gemini_service.dart';
 import 'knowledge_base_service.dart';
+import 'workout_session_service.dart';
 
 class RagService {
-  final _geminiService = GeminiService();
+  final _geminiService       = GeminiService();
   final _knowledgeBaseService = KnowledgeBaseService();
-  final _db = FirebaseFirestore.instance;
+  final _db                  = FirebaseFirestore.instance;
 
-  // Dictionary to convert database keys into human-readable text for the AI
   final Map<String, String> _injuryNames = {
     'rotatorCuff': 'Rotator Cuff / Shoulder',
     'deltoids': 'Deltoids',
@@ -30,34 +30,23 @@ class RagService {
     'abdominalHernia': 'Abdominal Hernia',
   };
 
-  // Helper to unpack the complex biometrics map into a flat list of injuries
   List<String> _extractActiveLimitations(Map<String, dynamic>? biometrics) {
-    if (biometrics == null || biometrics['noLimitations'] == true) {
-      return [];
-    }
-
+    if (biometrics == null || biometrics['noLimitations'] == true) return [];
     final List<String> active = [];
-
     void checkSection(Map<String, dynamic>? section) {
       section?.forEach((key, value) {
-        if (value == true) {
-          active.add(_injuryNames[key] ?? key);
-        }
+        if (value == true) active.add(_injuryNames[key] ?? key);
       });
     }
-
-    checkSection(biometrics['upperBody']);
-    checkSection(biometrics['lowerBody']);
-    checkSection(biometrics['coreSpine']);
-
-    // Systemic needs careful handling to translate keys to readable strings
+    checkSection(biometrics['upperBody'] as Map<String, dynamic>?);
+    checkSection(biometrics['lowerBody'] as Map<String, dynamic>?);
+    checkSection(biometrics['coreSpine'] as Map<String, dynamic>?);
     final systemic = biometrics['systemic'] as Map<String, dynamic>?;
-    if (systemic?['cardiovascular'] == true) active.add('Cardiovascular condition');
+    if (systemic?['cardiovascular']    == true) active.add('Cardiovascular condition');
     if (systemic?['respiratoryAsthma'] == true) active.add('Asthma / Respiratory');
-    if (systemic?['osteoarthritis'] == true) active.add('Osteoarthritis');
-    if (systemic?['wheelchair'] == true) active.add('Wheelchair user');
-    if (systemic?['prosthesis'] == true) active.add('Uses prosthesis');
-
+    if (systemic?['osteoarthritis']    == true) active.add('Osteoarthritis');
+    if (systemic?['wheelchair']        == true) active.add('Wheelchair user');
+    if (systemic?['prosthesis']        == true) active.add('Uses prosthesis');
     return active;
   }
 
@@ -65,32 +54,26 @@ class RagService {
     required String userQuestion,
     required String userId,
     List<Map<String, String>> chatHistory = const [],
+    List<WorkoutSession> recentSessions  = const [],  // NEW
   }) async* {
-    // STEP 1: Embed the user's question
     final queryVector = await _geminiService.getQueryEmbedding(userQuestion);
 
-    // STEP 2: Retrieve relevant chunks from Firestore
     final relevantChunks = await _knowledgeBaseService.searchSimilarChunks(
       queryVector: queryVector,
       limit: 3,
     );
 
-    // STEP 3: Fetch full user profile
-    final userDoc = await _db.collection('users').doc(userId).get();
+    final userDoc  = await _db.collection('users').doc(userId).get();
     final userData = userDoc.data() ?? {};
 
-    final userName = userData['name'] ?? 'the user';
-    
-    // Parse the biometrics map
-    final biometrics = userData['biometrics'] as Map<String, dynamic>?;
-    final limitations = _extractActiveLimitations(biometrics);
+    final userName     = userData['name'] ?? 'the user';
+    final biometrics   = userData['biometrics'] as Map<String, dynamic>?;
+    final limitations  = _extractActiveLimitations(biometrics);
     final clinicalNotes = biometrics?['clinicalNotes'] as String? ?? '';
-
-    final fatigueScore = (userData['fatigue_score'] as num?)?.toInt() ?? 5;
-    final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
+    final fatigueScore  = (userData['fatigue_score'] as num?)?.toInt() ?? 5;
+    final fitnessGoal   = userData['fitness_goal'] ?? 'general fitness';
     final currentStreak = (userData['current_streak'] as num?)?.toInt() ?? 0;
 
-    //Fetch only the most recent Workout Plan in the collection
     final workoutPlansSnapshot = await _db
         .collection('users')
         .doc(userId)
@@ -102,38 +85,55 @@ class RagService {
     String formattedWorkoutPlans = 'No active workout plans found.';
     if (workoutPlansSnapshot.docs.isNotEmpty) {
       final doc = workoutPlansSnapshot.docs.first;
-      formattedWorkoutPlans = 'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
+      formattedWorkoutPlans =
+          'Plan ID: ${doc.id}\nDetails: ${doc.data().toString()}';
     }
 
-    //Format the Chat History (Sliding Window of last 6 messages)
-    String formattedHistory = 'No prior context. This is the start of the conversation.';
+    String formattedHistory =
+        'No prior context. This is the start of the conversation.';
     if (chatHistory.isNotEmpty) {
-      // Take only the last 6 messages to save tokens and keep responses fast
-      final recentHistory = chatHistory.length > 6 
-          ? chatHistory.sublist(chatHistory.length - 6) 
+      final recentHistory = chatHistory.length > 6
+          ? chatHistory.sublist(chatHistory.length - 6)
           : chatHistory;
-          
       formattedHistory = recentHistory.map((msg) {
         final role = msg['role'] == 'user' ? 'USER' : 'ASSISTANT';
         return '$role: ${msg['text']}';
       }).join('\n\n');
     }
 
-    // STEP 4: Build the augmented prompt
+    // ── Format recent workout sessions for context injection ──────────────
+    // This is what makes the assistant "aware" of the user's training
+    // without needing RAG documents about their specific sessions.
+    String formattedSessions = 'No recent workout sessions recorded.';
+    if (recentSessions.isNotEmpty) {
+      formattedSessions = recentSessions.map((s) {
+        // Sort feedback by frequency so most impactful issues come first
+        final sortedFeedback = s.feedbackMap.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        final topIssues = sortedFeedback
+            .take(3)
+            .map((e) => '"${e.key}" (${e.value}x)')
+            .join(', ');
+        return '- ${s.exerciseDisplayName}: ${s.reps} reps, '
+            '${s.durationFormatted}, ${s.timeAgo}'
+            '${topIssues.isNotEmpty ? '\n  Top form issues: $topIssues' : ''}';
+      }).join('\n');
+    }
+
     final prompt = _buildPrompt(
-      userQuestion: userQuestion,
-      userName: userName,
-      limitations: limitations,
-      clinicalNotes: clinicalNotes,
-      fatigueScore: fatigueScore,
-      fitnessGoal: fitnessGoal,
-      currentStreak: currentStreak,
-      retrievedChunks: relevantChunks,
-      workoutPlans: formattedWorkoutPlans,
-      chatHistory: formattedHistory, // Pass the formatted history
+      userQuestion:       userQuestion,
+      userName:           userName,
+      limitations:        limitations,
+      clinicalNotes:      clinicalNotes,
+      fatigueScore:       fatigueScore,
+      fitnessGoal:        fitnessGoal,
+      currentStreak:      currentStreak,
+      retrievedChunks:    relevantChunks,
+      workoutPlans:       formattedWorkoutPlans,
+      chatHistory:        formattedHistory,
+      recentSessions:     formattedSessions,  // NEW
     );
 
-    // STEP 5: Yield the stream response directly from the Gemini service
     yield* _geminiService.streamResponse(prompt);
   }
 
@@ -148,22 +148,24 @@ class RagService {
     required List<Map<String, dynamic>> retrievedChunks,
     required String workoutPlans,
     required String chatHistory,
+    required String recentSessions,  // NEW
   }) {
-    // Just map the raw text. No reference numbers or filenames.
-    final contextBlock = retrievedChunks
-        .map((e) => e['text'])
-        .join('\n\n---\n\n');
+    final contextBlock =
+        retrievedChunks.map((e) => e['text']).join('\n\n---\n\n');
 
-    String limitationsText = limitations.isEmpty ? 'None reported' : limitations.join(', ');
+    String limitationsText =
+        limitations.isEmpty ? 'None reported' : limitations.join(', ');
     if (clinicalNotes.isNotEmpty) {
       limitationsText += '\nClinical Notes: $clinicalNotes';
     }
 
     String fatigueContext;
     if (fatigueScore >= 8) {
-      fatigueContext = '$fatigueScore/10 — HIGH. Recommend active recovery only today.';
+      fatigueContext =
+          '$fatigueScore/10 — HIGH. Recommend active recovery only today.';
     } else if (fatigueScore >= 5) {
-      fatigueContext = '$fatigueScore/10 — MODERATE. Recommend moderate intensity.';
+      fatigueContext =
+          '$fatigueScore/10 — MODERATE. Recommend moderate intensity.';
     } else {
       fatigueContext = '$fatigueScore/10 — LOW. Full intensity appropriate.';
     }
@@ -184,6 +186,16 @@ Workout Streak: $currentStreak days
 USER'S CURRENT WORKOUT PLANS
 ════════════════════════════════════
 $workoutPlans
+
+════════════════════════════════════
+RECENT WORKOUT SESSIONS
+════════════════════════════════════
+$recentSessions
+
+Use this section to answer questions about the user's recent training,
+form issues, and progress. If the user asks "how did I do today" or
+"what should I work on", use this data to give a specific, informed answer.
+You do NOT need the reference documents for session-specific questions.
 
 ════════════════════════════════════
 REFERENCE DOCUMENTS (retrieved from knowledge base)
