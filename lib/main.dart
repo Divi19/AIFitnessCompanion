@@ -9,6 +9,7 @@ import 'features/auth/auth_screen.dart';
 import 'features/nutrition/nutrition_assistant.dart';
 import 'features/workout/injury_profile_screen.dart';
 import 'features/workout/workout_builder_screen.dart';
+import 'features/workout/workout_plan_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'screens/workout_tracker_screen.dart';
 import 'screens/meal_tracker_screen.dart';
@@ -118,7 +119,7 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
           _currentIndex == 2
               ? const WorkoutTrackerScreen()
               : const SizedBox(),
-          const MealTrackerScreen(), // NEW 4TH TAB
+          const MealTrackerScreen(),
           const ProfileScreen(),
         ],
       ),
@@ -140,9 +141,9 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
             BottomNavigationBarItem(
                 icon: Icon(Icons.chat_bubble), label: 'Assistant'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.camera_alt), label: 'Pose'), // RENAMED
+                icon: Icon(Icons.camera_alt), label: 'Pose'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.restaurant), label: 'Meals'), // NEW TAB
+                icon: Icon(Icons.restaurant), label: 'Meals'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.person), label: 'Profile'),
           ],
@@ -161,10 +162,7 @@ class HomeDashboardTab extends StatefulWidget {
 }
 
 class _HomeDashboardTabState extends State<HomeDashboardTab> {
-  bool step1 = false;
-  bool step2 = false;
 
-  // NEW: Function to show dialog and update fatigue score in Firestore
   Future<void> _updateFatigue(BuildContext context, String uid, int currentFatigue) async {
     int? newFatigue = await showDialog<int>(
       context: context,
@@ -255,7 +253,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
           final targetWeightRaw = bodyStats['target_weight']?.toString();
           
-          //Check if the database value already contains 'kg' or 'lbs'
           final targetWeightStr = targetWeightRaw != null
               ? (targetWeightRaw.contains('kg') || targetWeightRaw.contains('lbs')
                   ? targetWeightRaw
@@ -269,11 +266,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               ? const Color(0xFFFF5E00)
               : const Color(0xFFB9FF2B);
 
-          // Get the start of today for our meal query
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
 
-          // SECOND STREAM: Fetching today's consumed meals dynamically
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('meals')
@@ -283,7 +278,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 .snapshots(),
             builder: (context, mealSnapshot) {
               
-              // Calculate dynamic intake from the snapshot
               double totalCaloriesDouble = 0;
               if (mealSnapshot.hasData) {
                 for (var doc in mealSnapshot.data!.docs) {
@@ -293,7 +287,6 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               }
               final int currentIntake = totalCaloriesDouble.round();
 
-              // Calculate progress bar logic
               double calorieProgress =
                   currentIntake / (recommendedCalories > 0 ? recommendedCalories : 1);
               if (calorieProgress > 1.0) calorieProgress = 1.0;
@@ -304,7 +297,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Greeting
+                    // ── Greeting ─────────────────────────────────────────
                     Center(
                       child: Column(
                         children: [
@@ -331,7 +324,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Weight Goal Card
+                    // ── Weight Goal Card ──────────────────────────────────
                     Container(
                       padding: const EdgeInsets.symmetric(
                           vertical: 24, horizontal: 16),
@@ -373,78 +366,20 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Today's Exercise Checklist
+                    // ── CHANGED: Active Workout Plan ──────────────────────
                     const Text(
-                      "Today's Exercise:",
+                      "Active Workout Plan:",
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFFB9FF2B)),
                     ),
                     const SizedBox(height: 12),
-
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Column(
-                        children: [
-                          CheckboxListTile(
-                            title: Text('hit 10k steps',
-                                style: TextStyle(
-                                  color: step1
-                                      ? Colors.white38
-                                      : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: step1
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor:
-                                      const Color(0xFFFF5E00),
-                                )),
-                            value: step1,
-                            onChanged: (val) =>
-                                setState(() => step1 = val!),
-                            activeColor: const Color(0xFFFF5E00),
-                            checkColor: Colors.white,
-                            controlAffinity:
-                                ListTileControlAffinity.leading,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          const Divider(height: 1, color: Colors.white10),
-                          CheckboxListTile(
-                            title: Text('HIIT workout',
-                                style: TextStyle(
-                                  color: step2
-                                      ? Colors.white38
-                                      : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: step2
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor:
-                                      const Color(0xFFFF5E00),
-                                )),
-                            value: step2,
-                            onChanged: (val) =>
-                                setState(() => step2 = val!),
-                            activeColor: const Color(0xFFFF5E00),
-                            checkColor: Colors.white,
-                            controlAffinity:
-                                ListTileControlAffinity.leading,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildActiveWorkoutCard(context, uid),
 
                     const SizedBox(height: 32),
 
-                    // Generate Routine Button
+                    // ── Generate Routine Button ───────────────────────────
                     Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
@@ -500,13 +435,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Calories Progress Bar (COLORS SWAPPED)
+                    // ── Calories Progress Bar ─────────────────────────────
                     const Text(
                       "Calories Intake:",
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFB9FF2B)), // Changed to Volt Green
+                          color: Color(0xFFB9FF2B)),
                     ),
                     const SizedBox(height: 16),
 
@@ -516,9 +451,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         value: calorieProgress,
                         minHeight: 24,
                         backgroundColor:
-                            const Color(0xFFFF5E00).withOpacity(0.15), // Changed to Translucent Orange
+                            const Color(0xFFFF5E00).withOpacity(0.15),
                         valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFFFF5E00)), // Changed to Solid Orange
+                            Color(0xFFFF5E00)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -540,7 +475,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 16),
                     
-                    // SCAN MEAL BUTTON
+                    // ── Scan Meal Button ──────────────────────────────────
                     ElevatedButton.icon(
                       onPressed: () => Navigator.push(
                         context,
@@ -561,7 +496,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     const Divider(color: Colors.white10),
                     const SizedBox(height: 24),
 
-                    // Vitals Row
+                    // ── Vitals Row ────────────────────────────────────────
                     Row(
                       children: [
                         Expanded(
@@ -580,13 +515,13 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         Expanded(
                           child: _buildVitalCard(
                             title: 'Fatigue',
-                            subtitle: 'Tap to update', // ADDED EXPLICIT INSTRUCTION
+                            subtitle: 'Tap to update',
                             value: '$fatigue/10',
                             icon: Icons.battery_charging_full,
                             bgColor: fatigueColor.withOpacity(0.15),
                             textColor: fatigueColor,
                             borderColor: fatigueColor.withOpacity(0.5),
-                            onTap: () => _updateFatigue(context, uid, fatigue is int ? fatigue : (fatigue as num).toInt()), // ADDED ONTAP ACTION
+                            onTap: () => _updateFatigue(context, uid, fatigue is int ? fatigue : (fatigue as num).toInt()),
                           ),
                         ),
                       ],
@@ -603,7 +538,207 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
     );
   }
 
-  // ADDED ONTAP OPTION & SUBTITLE TO HELPER
+  // ── ACTIVE WORKOUT PLAN CARD (new — replaces checklist) ──────────────────
+  Widget _buildActiveWorkoutCard(BuildContext context, String uid) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('workout_plans')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5E00), strokeWidth: 2),
+            ),
+          );
+        }
+
+        // No plan yet — prompt to generate
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return GestureDetector(
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const WorkoutBuilderScreen())),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.fitness_center, color: Colors.white24, size: 22),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('No Active Plan',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                    SizedBox(height: 3),
+                    Text('Tap to generate your first workout',
+                        style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ]),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 14),
+              ]),
+            ),
+          );
+        }
+
+        final doc       = snapshot.data!.docs.first;
+        final plan      = doc.data() as Map<String, dynamic>;
+        final planId    = doc.id;
+        final goal      = plan['goal']         as String? ?? 'Workout Plan';
+        final days      = plan['daysPerWeek'];
+        final duration  = plan['duration']     as String? ?? '';
+        final level     = plan['fitnessLevel'] as String? ?? '';
+        final expiresAt = plan['expiresAt']    as Timestamp?;
+
+        bool   isExpired   = false;
+        String expiryLabel = '';
+        if (expiresAt != null) {
+          final diff = expiresAt.toDate().difference(DateTime.now());
+          isExpired   = diff.isNegative;
+          expiryLabel = isExpired
+              ? 'Expired'
+              : 'Expires in ${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'}';
+        }
+
+        return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('users').doc(uid)
+              .collection('workout_plans').doc(planId)
+              .get(),
+          builder: (context, progSnap) {
+            double progress = 0.0;
+            if (progSnap.hasData && progSnap.data!.exists) {
+              final progData  = progSnap.data!.data() as Map<String, dynamic>? ?? {};
+              final completed = progData['progress'] as Map<String, dynamic>? ?? {};
+              final done  = completed.values.where((v) => v == true).length;
+              final total = completed.length;
+              if (total > 0) progress = done / total;
+            }
+
+            return GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => WorkoutPlanScreen(
+                  plan:   plan['plan'] as String? ?? '',
+                  planId: planId,
+                  uid:    uid,
+                ),
+              )),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isExpired
+                        ? Colors.red.withOpacity(0.4)
+                        : const Color(0xFFFF5E00).withOpacity(0.4),
+                  ),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Goal + active badge
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF5E00).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.fitness_center, color: Color(0xFFFF5E00), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(goal,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isExpired
+                            ? Colors.red.withOpacity(0.15)
+                            : const Color(0xFFB9FF2B).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isExpired ? 'Expired' : 'Active',
+                        style: TextStyle(
+                          color: isExpired ? Colors.redAccent : const Color(0xFFB9FF2B),
+                          fontSize: 11, fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 14),
+                  const Divider(color: Colors.white10, height: 1),
+                  const SizedBox(height: 14),
+                  // Progress bar
+                  Row(children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: Colors.white10,
+                          valueColor: const AlwaysStoppedAnimation(Color(0xFFFF5E00)),
+                          minHeight: 6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text('${(progress * 100).round()}%',
+                        style: const TextStyle(color: Color(0xFFFF5E00), fontSize: 12, fontWeight: FontWeight.w700)),
+                  ]),
+                  const SizedBox(height: 12),
+                  // Stats row
+                  Row(children: [
+                    _miniStat(Icons.calendar_today_outlined, '${days ?? '?'} days/wk'),
+                    const SizedBox(width: 16),
+                    _miniStat(Icons.timer_outlined, duration),
+                    const SizedBox(width: 16),
+                    _miniStat(Icons.bar_chart, level),
+                    const Spacer(),
+                    if (expiryLabel.isNotEmpty)
+                      Text(expiryLabel,
+                          style: TextStyle(
+                            color: isExpired ? Colors.redAccent : Colors.white38,
+                            fontSize: 11,
+                          )),
+                  ]),
+                ]),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _miniStat(IconData icon, String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: Colors.white38, size: 12),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+    ]);
+  }
+
   Widget _buildVitalCard({
     required String title,
     required String value,
