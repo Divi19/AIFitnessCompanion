@@ -17,11 +17,11 @@ class NutritionSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Calculate daily totals by summing consumed values across all logs.
-    // consumedCalories/consumedProtein etc. already apply the portion factor.
-    final totalCalories = logs.fold(0.0, (sum, m) => sum + m.consumedCalories);
-    final totalProtein = logs.fold(0.0, (sum, m) => sum + m.consumedProtein);
-    final totalCarbs = logs.fold(0.0, (sum, m) => sum + m.consumedCarbs);
-    final totalFat = logs.fold(0.0, (sum, m) => sum + m.consumedFat);
+    // Calories/Protein etc. already apply the portion factor.
+    final totalCalories = logs.fold(0.0, (sum, m) => sum + m.calories);
+    final totalProtein = logs.fold(0.0, (sum, m) => sum + m.protein);
+    final totalCarbs = logs.fold(0.0, (sum, m) => sum + m.carbs);
+    final totalFat = logs.fold(0.0, (sum, m) => sum + m.fat);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -117,7 +117,7 @@ class NutritionSummaryCard extends StatelessWidget {
                         ),
                         // Consumed calories for this entry
                         Text(
-                          '${log.consumedCalories.toStringAsFixed(0)} kcal',
+                          '${log.calories.toStringAsFixed(0)} kcal',
                           style: const TextStyle(
                             color: Colors.orangeAccent,
                             fontSize: 13,
