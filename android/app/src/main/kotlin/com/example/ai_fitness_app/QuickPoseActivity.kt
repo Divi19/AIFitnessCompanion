@@ -37,18 +37,15 @@ class QuickPoseActivity : ComponentActivity() {
         const val MIN_REPS        = 3
         const val MIN_DURATION_MS = 20_000L
 
-        // Camera setup messages — shown on screen but excluded from debrief map
         val SETUP_KEYWORDS = setOf(
             "back", "closer", "further", "forward", "camera",
             "centre", "center", "frame", "step", "move", "distance",
             "right", "left", "position", "align"
         )
 
-        // Form quality gate — blocks rep counting for N frames after bad form detected
         const val FORM_FEEDBACK_WINDOW = 25
 
         // MediaPipe 33-point pose landmark indices
-        // poseLandmarks is a flat List<Landmark> ordered by these indices
         const val LM_LEFT_SHOULDER  = 11
         const val LM_RIGHT_SHOULDER = 12
         const val LM_LEFT_ELBOW     = 13
@@ -72,19 +69,62 @@ class QuickPoseActivity : ComponentActivity() {
     private val counter = QuickPoseThresholdCounter()
     private var currentExercise = "squat"
 
-    // ── Session tracking ──────────────────────────────────────────────────
     private var sessionStartMs       = 0L
     private var latestRepCount       = 0
     private val feedbackFrequency    = mutableMapOf<String, Int>()
     private var lastRepTime          = 0L
     private var formFeedbackCooldown = 0
-
-    // Tracks the counter float value previous frame — used to detect rep start/end
-    private var prevCounterValue = 0f
+    private var prevCounterValue     = 0f
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
     private lateinit var exerciseLabel: TextView
+
+    // ── Simple landmark data class ─────────────────────────────────────────
+    // We extract x, y, visibility from whatever object QuickPose returns
+    // using reflection, then work with this plain data class internally.
+    data class LM(val x: Float, val y: Float, val visibility: Float)
+
+    // ── Reflection-based landmark extraction ─────────────────────────────
+    // Reads x, y, visibility fields from a QuickPose landmark object
+    // without needing to know its exact class name at compile time.
+    private fun extractLM(obj: Any?): LM? {
+        if (obj == null) return null
+        return try {
+            val cls = obj.javaClass
+            // Try field access first, then getter methods as fallback
+            fun getFloat(name: String): Float? = try {
+                cls.getField(name).getFloat(obj)
+            } catch (_: Exception) { try {
+                val getter = "get${name.replaceFirstChar { it.uppercase() }}"
+                cls.getMethod(getter).invoke(obj) as? Float
+            } catch (_: Exception) { null } }
+
+            val x = getFloat("x") ?: return null
+            val y = getFloat("y") ?: return null
+            val v = getFloat("visibility") ?: 1f  // default to 1 if not present
+            LM(x, y, v)
+        } catch (_: Exception) { null }
+    }
+
+    // Get a landmark from the list by index, returns null if out of bounds,
+    // null object, or visibility too low
+    private fun lm(list: List<*>, index: Int): LM? {
+        if (index >= list.size) return null
+        val raw = extractLM(list[index]) ?: return null
+        return if (raw.visibility < 0.5f) null else raw
+    }
+
+    // ── Get pose landmarks list from QuickPose Landmarks object ──────────
+    // Uses reflection to call getPoseLandmarks() without importing the type
+    private fun getPoseLandmarks(landmarks: Any?): List<*> {
+        if (landmarks == null) return emptyList<Any>()
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            landmarks.javaClass.getMethod("getPoseLandmarks").invoke(landmarks) as? List<*>
+                ?: emptyList<Any>()
+        } catch (_: Exception) { emptyList<Any>() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -248,20 +288,7 @@ class QuickPoseActivity : ComponentActivity() {
         }
     }
 
-    // ── Landmark helpers ──────────────────────────────────────────────────
-
-    // Safe access into poseLandmarks list by index
-    // Returns null if list is empty, too short, or landmark has low visibility
-    private fun lm(poseLandmarks: List<Landmark>, index: Int): Landmark? {
-        if (poseLandmarks.size <= index) return null
-        val l = poseLandmarks[index]
-        // Only use landmark if visibility is reasonably high (>0.5)
-        // Avoids false depth rejections from occluded/guessed landmarks
-        if (l.visibility < 0.5f) return null
-        return l
-    }
-
-    // Angle at point B given three 2D points A, B, C
+    // ── Angle at point B given three 2D points A, B, C ───────────────────
     private fun angleDeg(
         ax: Float, ay: Float,
         bx: Float, by: Float,
@@ -278,25 +305,18 @@ class QuickPoseActivity : ComponentActivity() {
         ).toFloat()
     }
 
-    // ── Depth checks — run at rep completion ─────────────────────────────
-    // Returns a corrective message if depth was insufficient, null if fine.
-    // Only called when poseLandmarks is non-empty (QuickPose has confident detection).
-    private fun checkDepthAtRepCompletion(
-        exercise: String,
-        poseLandmarks: List<Landmark>
-    ): String? {
-        if (poseLandmarks.isEmpty()) return null
+    // ── Depth checks at rep completion ────────────────────────────────────
+    private fun checkDepthAtRepCompletion(exercise: String, p: List<*>): String? {
+        if (p.isEmpty()) return null
         return when (exercise) {
-            "squat"                   -> checkSquatDepth(poseLandmarks)
-            "lunge_left", "lunge_right" -> checkLungeDepth(poseLandmarks, exercise)
-            "pushup"                  -> checkPushupDepth(poseLandmarks)
-            else                      -> null
+            "squat"                     -> checkSquatDepth(p)
+            "lunge_left", "lunge_right" -> checkLungeDepth(p, exercise)
+            "pushup"                    -> checkPushupDepth(p)
+            else                        -> null
         }
     }
 
-    private fun checkSquatDepth(p: List<Landmark>): String? {
-        // Knee angle (hip-knee-ankle). Good depth = angle < 110°.
-        // Above 110° means the user didn't get low enough.
+    private fun checkSquatDepth(p: List<*>): String? {
         val lHip   = lm(p, LM_LEFT_HIP)    ?: return null
         val lKnee  = lm(p, LM_LEFT_KNEE)   ?: return null
         val lAnkle = lm(p, LM_LEFT_ANKLE)  ?: return null
@@ -307,35 +327,24 @@ class QuickPoseActivity : ComponentActivity() {
         val leftAngle  = angleDeg(lHip.x, lHip.y, lKnee.x, lKnee.y, lAnkle.x, lAnkle.y)
         val rightAngle = angleDeg(rHip.x, rHip.y, rKnee.x, rKnee.y, rAnkle.x, rAnkle.y)
         val avgAngle   = (leftAngle + rightAngle) / 2f
-
         println("=== SQUAT DEPTH: kneeAngle=$avgAngle ===")
         return if (avgAngle > 110f) "Go deeper — hips below knees" else null
     }
 
-    private fun checkLungeDepth(p: List<Landmark>, exercise: String): String? {
+    private fun checkLungeDepth(p: List<*>, exercise: String): String? {
         val isLeft  = exercise == "lunge_left"
-        val hipIdx  = if (isLeft) LM_LEFT_HIP   else LM_RIGHT_HIP
-        val kneeIdx = if (isLeft) LM_LEFT_KNEE  else LM_RIGHT_KNEE
-        val ankIdx  = if (isLeft) LM_LEFT_ANKLE else LM_RIGHT_ANKLE
-        val toeIdx  = if (isLeft) LM_LEFT_TOE   else LM_RIGHT_TOE
-
-        val hip   = lm(p, hipIdx)  ?: return null
-        val knee  = lm(p, kneeIdx) ?: return null
-        val ankle = lm(p, ankIdx)  ?: return null
-        val toe   = lm(p, toeIdx)  ?: return null
+        val hip     = lm(p, if (isLeft) LM_LEFT_HIP   else LM_RIGHT_HIP)   ?: return null
+        val knee    = lm(p, if (isLeft) LM_LEFT_KNEE  else LM_RIGHT_KNEE)  ?: return null
+        val ankle   = lm(p, if (isLeft) LM_LEFT_ANKLE else LM_RIGHT_ANKLE) ?: return null
+        val toe     = lm(p, if (isLeft) LM_LEFT_TOE   else LM_RIGHT_TOE)   ?: return null
 
         val kneeAngle = angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
         if (kneeAngle > 120f) return "Lunge deeper — front knee to 90 degrees"
-
-        // Knee-over-toe check using normalised x coordinates
-        val kneeOverToe = abs(knee.x - toe.x)
-        if (kneeOverToe > 0.08f) return "Keep your front knee behind your toes"
-
+        if (abs(knee.x - toe.x) > 0.08f) return "Keep your front knee behind your toes"
         return null
     }
 
-    private fun checkPushupDepth(p: List<Landmark>): String? {
-        // Elbow angle (shoulder-elbow-wrist). Good depth = angle < 120°.
+    private fun checkPushupDepth(p: List<*>): String? {
         val lShoulder = lm(p, LM_LEFT_SHOULDER)  ?: return null
         val lElbow    = lm(p, LM_LEFT_ELBOW)     ?: return null
         val lWrist    = lm(p, LM_LEFT_WRIST)     ?: return null
@@ -346,54 +355,38 @@ class QuickPoseActivity : ComponentActivity() {
         val leftAngle  = angleDeg(lShoulder.x, lShoulder.y, lElbow.x, lElbow.y, lWrist.x, lWrist.y)
         val rightAngle = angleDeg(rShoulder.x, rShoulder.y, rElbow.x, rElbow.y, rWrist.x, rWrist.y)
         val avgAngle   = (leftAngle + rightAngle) / 2f
-
         println("=== PUSHUP DEPTH: elbowAngle=$avgAngle ===")
         return if (avgAngle > 120f) "Go lower — chest closer to the ground" else null
     }
 
-    // ── Live form checks — run every active frame ─────────────────────────
-    // Catches issues QuickPose doesn't detect natively.
-    // Only runs when counterValue > 0.3 (mid-rep, not resting position).
-    private fun checkLiveForm(
-        exercise: String,
-        poseLandmarks: List<Landmark>,
-        counterValue: Float
-    ): String? {
-        if (poseLandmarks.isEmpty() || counterValue < 0.3f) return null
+    // ── Live form checks every active frame ───────────────────────────────
+    private fun checkLiveForm(exercise: String, p: List<*>, counterValue: Float): String? {
+        if (p.isEmpty() || counterValue < 0.3f) return null
         return when (exercise) {
-            "bicep_curl"                -> checkBicepElbowRaising(poseLandmarks)
-            "lunge_left", "lunge_right" -> checkLungeKneeLive(poseLandmarks, exercise)
+            "bicep_curl"                -> checkBicepElbowRaising(p)
+            "lunge_left", "lunge_right" -> checkLungeKneeLive(p, exercise)
             else                        -> null
         }
     }
 
-    private fun checkBicepElbowRaising(p: List<Landmark>): String? {
-        // If elbow y is significantly above shoulder y, the user is raising their arm.
-        // In normalised coords y increases downward, so lower y value = higher on screen.
+    private fun checkBicepElbowRaising(p: List<*>): String? {
         val lShoulder = lm(p, LM_LEFT_SHOULDER)  ?: return null
         val rShoulder = lm(p, LM_RIGHT_SHOULDER) ?: return null
         val lElbow    = lm(p, LM_LEFT_ELBOW)     ?: return null
         val rElbow    = lm(p, LM_RIGHT_ELBOW)    ?: return null
 
-        // Positive value = elbow is higher on screen than shoulder
         val leftRaise  = lShoulder.y - lElbow.y
         val rightRaise = rShoulder.y - rElbow.y
         val maxRaise   = maxOf(leftRaise, rightRaise)
-
         return if (maxRaise > 0.08f) "Keep elbows tucked — don't raise them" else null
     }
 
-    private fun checkLungeKneeLive(p: List<Landmark>, exercise: String): String? {
-        val kneeIdx = if (exercise == "lunge_left") LM_LEFT_KNEE else LM_RIGHT_KNEE
-        val toeIdx  = if (exercise == "lunge_left") LM_LEFT_TOE  else LM_RIGHT_TOE
-
-        val knee = lm(p, kneeIdx) ?: return null
-        val toe  = lm(p, toeIdx)  ?: return null
-
+    private fun checkLungeKneeLive(p: List<*>, exercise: String): String? {
+        val knee = lm(p, if (exercise == "lunge_left") LM_LEFT_KNEE else LM_RIGHT_KNEE) ?: return null
+        val toe  = lm(p, if (exercise == "lunge_left") LM_LEFT_TOE  else LM_RIGHT_TOE)  ?: return null
         return if (abs(knee.x - toe.x) > 0.08f) "Keep front knee behind your toes" else null
     }
 
-    // ── Feature and display name maps ─────────────────────────────────────
     private fun featureFor(name: String): Feature = when (name) {
         "squat"        -> Feature.Fitness(FitnessFeature.Squats)
         "pushup"       -> Feature.Fitness(FitnessFeature.PushUps)
@@ -420,7 +413,6 @@ class QuickPoseActivity : ComponentActivity() {
         else           -> name
     }
 
-    // ── Main QuickPose loop ───────────────────────────────────────────────
     private fun startQuickPose(exerciseName: String) {
         lifecycleScope.launch {
             cameraView.start(useFrontCamera = true)
@@ -429,24 +421,20 @@ class QuickPoseActivity : ComponentActivity() {
                 arrayOf(featureFor(exerciseName)),
                 onFrame = { status, _, features, feedback, landmarks ->
 
-                    // ── Get pose landmarks from QuickPose Landmarks object ─
-                    // poseLandmarks is a flat List<Landmark> of 33 MediaPipe points.
-                    // It is empty when QuickPose doesn't have a confident detection —
-                    // depth/live checks are skipped entirely in that case.
-                    val poseLandmarks = landmarks?.getPoseLandmarks() ?: emptyList()
+                    // Get pose landmarks via reflection — works regardless of
+                    // the exact Landmark class name in this SDK version
+                    val poseLandmarks = getPoseLandmarks(landmarks)
 
-                    // ── Get counter value for this frame ──────────────────
+                    // Track counter value for live form checks
                     var counterValue = 0f
                     features?.forEach { (feature, result) ->
                         if (feature is Feature.Fitness) counterValue = result.value
                     }
-
-                    // Detect rep start — counter drops back toward 0 after being high
                     prevCounterValue = counterValue
 
                     // ── QuickPose native feedback ─────────────────────────
                     val quickPoseFeedback = feedback?.values?.firstOrNull()?.displayString ?: ""
-                    val isSetupMsg    = quickPoseFeedback.isNotEmpty() &&
+                    val isSetupMsg     = quickPoseFeedback.isNotEmpty() &&
                         SETUP_KEYWORDS.any { quickPoseFeedback.lowercase().contains(it) }
                     val isFormFeedback = quickPoseFeedback.isNotEmpty() && !isSetupMsg
 
@@ -458,7 +446,7 @@ class QuickPoseActivity : ComponentActivity() {
                         formFeedbackCooldown--
                     }
 
-                    // ── Live form check (runs every active frame) ─────────
+                    // ── Live landmark-based form check ────────────────────
                     val liveFormMsg = checkLiveForm(exerciseName, poseLandmarks, counterValue)
                     if (liveFormMsg != null) {
                         formFeedbackCooldown = FORM_FEEDBACK_WINDOW
@@ -478,15 +466,14 @@ class QuickPoseActivity : ComponentActivity() {
                                 (now - lastRepTime) > 500L) {
 
                                 when {
-                                    // ── Form quality gate ─────────────────
                                     formFeedbackCooldown > 0 -> {
+                                        // Bad form — reject rep
                                         repRejectedMsg = "Fix your form to count this rep"
                                         feedbackFrequency[repRejectedMsg!!] =
                                             (feedbackFrequency[repRejectedMsg!!] ?: 0) + 1
                                     }
-                                    // ── Depth check ───────────────────────
-                                    // Only runs when landmarks are available
                                     poseLandmarks.isNotEmpty() -> {
+                                        // Landmarks available — run depth check
                                         val depthMsg = checkDepthAtRepCompletion(
                                             exerciseName, poseLandmarks
                                         )
@@ -495,16 +482,12 @@ class QuickPoseActivity : ComponentActivity() {
                                             feedbackFrequency[depthMsg] =
                                                 (feedbackFrequency[depthMsg] ?: 0) + 1
                                         } else {
-                                            // Valid rep — count it
                                             latestRepCount = counterState.count
                                             lastRepTime    = now
                                         }
                                     }
-                                    // ── Landmarks empty — count rep but note it ─
-                                    // If QuickPose can't see the body well enough
-                                    // for landmarks, we still count the rep (QuickPose
-                                    // verified it) but skip depth check silently
                                     else -> {
+                                        // No landmarks — count rep, skip depth check
                                         latestRepCount = counterState.count
                                         lastRepTime    = now
                                     }
@@ -513,7 +496,7 @@ class QuickPoseActivity : ComponentActivity() {
                         }
                     }
 
-                    // Priority: rep rejection > live form > QuickPose native feedback
+                    // Priority: rep rejection > live form > QuickPose native
                     val shownFeedback = repRejectedMsg
                         ?: liveFormMsg?.takeIf { quickPoseFeedback.isEmpty() }
                         ?: quickPoseFeedback
