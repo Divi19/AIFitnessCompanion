@@ -21,50 +21,45 @@ import kotlinx.coroutines.launch
 class QuickPoseActivity : ComponentActivity() {
 
     companion object {
-        const val EXTRA_EXERCISE    = "exercise"
-        const val ACTION_RESULT     = "com.example.ai_fitness_app.QUICKPOSE_RESULT"
-        const val ACTION_SESSION    = "com.example.ai_fitness_app.QUICKPOSE_SESSION"
-        const val EXTRA_REP_COUNT   = "rep_count"
-        const val EXTRA_FEEDBACK    = "feedback"
-        const val EXTRA_STATUS      = "status"
-
-        // Session summary extras — broadcast when session ends
-        const val EXTRA_SESSION_EXERCISE        = "session_exercise"
-        const val EXTRA_SESSION_REPS            = "session_reps"
-        const val EXTRA_SESSION_DURATION_MS     = "session_duration_ms"
+        const val EXTRA_EXERCISE            = "exercise"
+        const val ACTION_RESULT             = "com.example.ai_fitness_app.QUICKPOSE_RESULT"
+        const val ACTION_SESSION            = "com.example.ai_fitness_app.QUICKPOSE_SESSION"
+        const val EXTRA_REP_COUNT           = "rep_count"
+        const val EXTRA_FEEDBACK            = "feedback"
+        const val EXTRA_STATUS              = "status"
+        const val EXTRA_SESSION_EXERCISE    = "session_exercise"
+        const val EXTRA_SESSION_REPS        = "session_reps"
+        const val EXTRA_SESSION_DURATION_MS = "session_duration_ms"
         const val EXTRA_SESSION_FEEDBACK_KEYS   = "session_feedback_keys"
         const val EXTRA_SESSION_FEEDBACK_VALUES = "session_feedback_values"
 
-        // Quality thresholds — sessions below these are silently discarded
         const val MIN_REPS        = 3
-        const val MIN_DURATION_MS = 20_000L   // 20 seconds
+        const val MIN_DURATION_MS = 20_000L
 
-        // Keywords that identify camera setup messages — filtered out of the
-        // feedback map because they are positional instructions, not form corrections.
-        // Using keyword matching so it works even if QuickPose changes exact wording.
         val SETUP_KEYWORDS = setOf(
             "back", "closer", "further", "forward", "camera",
             "centre", "center", "frame", "step", "move", "distance",
             "right", "left", "position", "align"
         )
+
+        const val FORM_FEEDBACK_WINDOW = 25
+
+        // Flag so we only print landmark debug once, not every frame
+        var landmarkDebugPrinted = false
     }
 
     private val quickPose get() = QuickPoseHolder.quickPose
         ?: throw IllegalStateException("QuickPose not initialised")
-
     private lateinit var cameraView: QuickPoseCameraSwitchView
 
     private val counter = QuickPoseThresholdCounter()
     private var currentExercise = "squat"
 
-    // ── Session tracking ──────────────────────────────────────────────────
-    private var sessionStartMs   = 0L
-    private var latestRepCount   = 0
-    // Feedback frequency map — key: feedback string, value: occurrence count
-    private val feedbackFrequency = mutableMapOf<String, Int>()
-
-    // Ghost rep guard
-    private var lastRepTime = 0L
+    private var sessionStartMs       = 0L
+    private var latestRepCount       = 0
+    private val feedbackFrequency    = mutableMapOf<String, Int>()
+    private var lastRepTime          = 0L
+    private var formFeedbackCooldown = 0
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
@@ -73,7 +68,6 @@ class QuickPoseActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // setDecorFitsSystemWindows requires API 30+ — S9+ runs API 29
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
         }
@@ -162,6 +156,7 @@ class QuickPoseActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resetSessionData()
+        landmarkDebugPrinted = false
         startQuickPose(currentExercise)
     }
 
@@ -181,19 +176,17 @@ class QuickPoseActivity : ComponentActivity() {
         finish()
     }
 
-    // ── Reset all session tracking data ──────────────────────────────────
     private fun resetSessionData() {
-        sessionStartMs = System.currentTimeMillis()
-        latestRepCount = 0
+        sessionStartMs       = System.currentTimeMillis()
+        latestRepCount       = 0
         feedbackFrequency.clear()
-        lastRepTime    = 0L
+        lastRepTime          = 0L
+        formFeedbackCooldown = 0
         counter.reset()
     }
 
-    // ── Check quality thresholds and broadcast session summary if valid ───
     private fun broadcastSessionIfValid() {
-        val durationMs = System.currentTimeMillis() - sessionStartMs
-
+        val durationMs    = System.currentTimeMillis() - sessionStartMs
         val meetsReps     = latestRepCount >= MIN_REPS
         val meetsDuration = durationMs     >= MIN_DURATION_MS
 
@@ -205,8 +198,6 @@ class QuickPoseActivity : ComponentActivity() {
             return
         }
 
-        // Flatten the feedback map into two parallel arrays for Intent extras
-        // (Intent doesn't support Map directly)
         val feedbackKeys   = feedbackFrequency.keys.toTypedArray()
         val feedbackValues = feedbackFrequency.values.map { it }.toIntArray()
 
@@ -226,10 +217,8 @@ class QuickPoseActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val newExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: return
         if (newExercise != currentExercise) {
-            // Save the current exercise session before switching
             quickPose.stop()
             broadcastSessionIfValid()
-
             currentExercise = newExercise
             runOnUiThread {
                 repCountText.text       = "0"
@@ -238,6 +227,7 @@ class QuickPoseActivity : ComponentActivity() {
             }
             lifecycleScope.launch {
                 resetSessionData()
+                landmarkDebugPrinted = false
                 startQuickPose(newExercise)
             }
         }
@@ -275,53 +265,70 @@ class QuickPoseActivity : ComponentActivity() {
 
             quickPose.start(
                 arrayOf(featureFor(exerciseName)),
-                onFrame = { status, _, features, feedback, _ ->
+                onFrame = { status, _, features, feedback, landmarks ->
 
-                    // ── Rep counting with ghost rep guard ─────────────────
+                    // ── TEMPORARY LANDMARK DEBUG — remove after confirming type ──
+                    if (!landmarkDebugPrinted && landmarks != null) {
+                        landmarkDebugPrinted = true
+                        println("=== LANDMARKS TYPE: ${landmarks.javaClass.name} ===")
+                        println("=== LANDMARKS VALUE: $landmarks ===")
+                        // Also print all declared methods so we can see the API
+                        landmarks.javaClass.methods.take(20).forEach { method ->
+                            println("=== LANDMARKS METHOD: ${method.name}(${method.parameterTypes.map { it.simpleName }}) -> ${method.returnType.simpleName} ===")
+                        }
+                    }
+                    // ── END LANDMARK DEBUG ────────────────────────────────────────
+
+                    // ── Rep counting with ghost rep + form gate ───────────
+                    val quickPoseFeedback = feedback?.values?.firstOrNull()?.displayString ?: ""
+                    val isSetupMessage = quickPoseFeedback.isNotEmpty() &&
+                        SETUP_KEYWORDS.any { quickPoseFeedback.lowercase().contains(it) }
+                    val isFormFeedback = quickPoseFeedback.isNotEmpty() && !isSetupMessage
+
+                    if (isFormFeedback) {
+                        formFeedbackCooldown = FORM_FEEDBACK_WINDOW
+                        feedbackFrequency[quickPoseFeedback] =
+                            (feedbackFrequency[quickPoseFeedback] ?: 0) + 1
+                    } else if (formFeedbackCooldown > 0) {
+                        formFeedbackCooldown--
+                    }
+
+                    var repRejectedMsg: String? = null
+
                     features?.forEach { (feature, result) ->
                         if (feature is Feature.Fitness) {
                             val counterState = counter.count(result.value)
                             val now = System.currentTimeMillis()
-                            // Only accept a new rep if 500ms has passed since the last one
                             if (counterState.count > latestRepCount &&
                                 (now - lastRepTime) > 500L) {
-                                latestRepCount = counterState.count
-                                lastRepTime    = now
+                                if (formFeedbackCooldown > 0) {
+                                    repRejectedMsg = "Fix your form to count this rep"
+                                    feedbackFrequency[repRejectedMsg!!] =
+                                        (feedbackFrequency[repRejectedMsg!!] ?: 0) + 1
+                                } else {
+                                    latestRepCount = counterState.count
+                                    lastRepTime    = now
+                                }
                             }
                         }
                     }
 
-                    // ── Feedback accumulation ─────────────────────────────
-                    // Filter out camera setup messages — these are positional
-                    // instructions (stand back, move closer etc.) not form
-                    // corrections. They pollute the debrief with useless info.
-                    val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
-                    if (feedbackMsg.isNotEmpty()) {
-                        val lowerMsg = feedbackMsg.lowercase()
-                        val isSetupMessage = SETUP_KEYWORDS.any { lowerMsg.contains(it) }
-                        if (!isSetupMessage) {
-                            feedbackFrequency[feedbackMsg] =
-                                (feedbackFrequency[feedbackMsg] ?: 0) + 1
-                        }
-                    }
+                    val shownFeedback = repRejectedMsg ?: quickPoseFeedback
+                    val statusStr     = if (status is Status.Success) "success" else "loading"
 
-                    val statusStr = if (status is Status.Success) "success" else "loading"
-
-                    // ── Update UI ─────────────────────────────────────────
                     runOnUiThread {
                         repCountText.text = latestRepCount.toString()
-                        if (feedbackMsg.isNotEmpty()) {
-                            feedbackText.text       = feedbackMsg
+                        if (shownFeedback.isNotEmpty()) {
+                            feedbackText.text       = shownFeedback
                             feedbackText.visibility = View.VISIBLE
                         } else {
                             feedbackText.visibility = View.GONE
                         }
                     }
 
-                    // ── Broadcast live results to Flutter ─────────────────
                     sendBroadcast(Intent(ACTION_RESULT).apply {
                         putExtra(EXTRA_REP_COUNT, latestRepCount)
-                        putExtra(EXTRA_FEEDBACK,  feedbackMsg)
+                        putExtra(EXTRA_FEEDBACK,  shownFeedback)
                         putExtra(EXTRA_STATUS,    statusStr)
                         setPackage(packageName)
                     })
