@@ -173,16 +173,13 @@ class WorkoutSessionService {
     required Map<String, dynamic> userData,
   }) async {
     final limitations = _extractLimitations(userData['biometrics']);
-    final fitnessGoal = userData['fitness_goal'] ?? 'general fitness';
-    final fitnessLevel = (userData['workout_preferences']
-        as Map<String, dynamic>?)?['fitness_level'] ?? 'Beginner';
 
     // Sort feedback by frequency so most common issues appear first
     final sortedFeedback = feedbackMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final feedbackBlock = sortedFeedback.isEmpty
-        ? 'No specific form feedback recorded.'
+        ? 'No specific form feedback recorded — form looked clean.'
         : sortedFeedback
             .map((e) => '- "${e.key}" (${e.value} times)')
             .join('\n');
@@ -191,27 +188,26 @@ class WorkoutSessionService {
     final exerciseDisplay = _displayName(exercise);
 
     final prompt = '''
-You are an encouraging personal trainer giving a quick post-workout debrief.
+You are a personal trainer giving a post-set coaching debrief based purely on pose tracking data.
 
 Session Data:
 - Exercise: $exerciseDisplay
 - Reps completed: $reps
 - Duration: ${durationSec}s
-- Fitness level: $fitnessLevel
-- Fitness goal: $fitnessGoal
 - Physical limitations: ${limitations.isEmpty ? 'None' : limitations.join(', ')}
 
-Form feedback received during session (most frequent first):
+Form feedback from pose tracker (most frequent first):
 $feedbackBlock
 
 Write a spoken coaching debrief of around 100-150 words. Rules:
-- Structure it in this order: (1) quick overall performance summary, (2) what they did well or maintained, (3) the top 1-2 form issues to work on and WHY they matter, (4) one specific actionable drill or cue for next session
-- If feedbackMap is empty, acknowledge their clean form and focus on progression tips instead
-- If they have physical limitations, flag if any form issue could aggravate them and suggest a safer modification
-- Be encouraging and direct — like a real coach talking after a session, not a report
+- Focus ONLY on the pose tracking data above — do NOT mention the user's fitness goals, preferred activities, or anything outside this session
+- Keep any positive opener to ONE short sentence maximum, then immediately move to coaching
+- Cover: (1) the top 1-2 form issues from the data and WHY they matter for safety or effectiveness, (2) one specific actionable drill or cue to fix it next set
+- If form feedback is empty, say their form looked clean and give one progression tip for this specific exercise
+- If they have physical limitations, flag if any form issue could aggravate them
 - Do NOT use bullet points, headers, numbers, or markdown — plain flowing sentences only
-- Do NOT start with "Great job" or generic praise — open with something specific to their session
-- Keep it natural and conversational so it sounds good when read aloud
+- Do NOT mention yoga, cardio, goals, or anything unrelated to the exercise just performed
+- Sound like a real coach talking, not a report — direct, useful, energetic
 ''';
 
     try {
