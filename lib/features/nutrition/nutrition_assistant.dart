@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/rag_service.dart';
 import '../../services/workout_session_service.dart';
@@ -23,7 +24,6 @@ class _NutritionAssistantScreenState
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
-  // Selected session for debrief expansion — null means none selected
   WorkoutSession? _expandedSession;
 
   Future<void> _sendMessage({String? overrideText}) async {
@@ -46,7 +46,6 @@ class _NutritionAssistantScreenState
         .toList();
 
     try {
-      // Fetch recent sessions to inject as context
       final recentSessions = await _sessionService.getRecentSessions(limit: 3);
 
       final stream = _ragService.query(
@@ -68,7 +67,7 @@ class _NutritionAssistantScreenState
                 {'role': 'assistant', 'text': chunk, 'isStreaming': true});
             isFirstChunk = false;
           } else {
-            final lastIndex  = _messages.length - 1;
+            final lastIndex   = _messages.length - 1;
             final currentText = _messages[lastIndex]['text'] as String;
             _messages[lastIndex] = {
               'role': 'assistant',
@@ -141,11 +140,8 @@ class _NutritionAssistantScreenState
         children: [
 
           // ── Session History Strip ────────────────────────────────────────
-          // Shows recent workout sessions as tappable cards at the top.
-          // Tapping a card expands the debrief inline and pre-seeds a
-          // follow-up question into the chat.
           _SessionHistoryStrip(
-            sessionService: _sessionService,
+            sessionService:  _sessionService,
             expandedSession: _expandedSession,
             onSessionTap: (session) {
               setState(() {
@@ -196,9 +192,9 @@ class _NutritionAssistantScreenState
                       }
                       final msg = _messages[index];
                       return _ChatBubble(
-                        text:        msg['text']        as String,
-                        isUser:      msg['role']        == 'user',
-                        isStreaming: msg['isStreaming']  as bool,
+                        text:        msg['text']       as String,
+                        isUser:      msg['role']       == 'user',
+                        isStreaming: msg['isStreaming'] as bool,
                       );
                     },
                   ),
@@ -206,8 +202,7 @@ class _NutritionAssistantScreenState
 
           // ── Input Bar ────────────────────────────────────────────────────
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
               color: Color(0xFF1A1A1A),
               border: Border(top: BorderSide(color: Colors.white10)),
@@ -220,8 +215,7 @@ class _NutritionAssistantScreenState
                     textCapitalization: TextCapitalization.sentences,
                     style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(
-                      hintText:
-                          'e.g. Give me 3 alternatives to deadlifts',
+                      hintText: 'e.g. Give me 3 alternatives to deadlifts',
                       hintStyle: TextStyle(color: Colors.grey),
                       border: InputBorder.none,
                     ),
@@ -237,8 +231,7 @@ class _NutritionAssistantScreenState
                   ),
                   child: IconButton(
                     icon: Icon(Icons.send,
-                        color:
-                            _isLoading ? Colors.grey : Colors.black),
+                        color: _isLoading ? Colors.grey : Colors.black),
                     onPressed: _isLoading ? null : _sendMessage,
                   ),
                 ),
@@ -252,7 +245,10 @@ class _NutritionAssistantScreenState
 }
 
 // ── Session History Strip ─────────────────────────────────────────────────
-class _SessionHistoryStrip extends StatelessWidget {
+// StatefulWidget so it can own the FlutterTts instance and speaking state.
+// TTS lives here rather than in the parent so it's tied to the debrief panel
+// lifecycle — stops automatically when the panel collapses.
+class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
   final WorkoutSession? expandedSession;
   final void Function(WorkoutSession) onSessionTap;
@@ -264,6 +260,66 @@ class _SessionHistoryStrip extends StatelessWidget {
     required this.onSessionTap,
     required this.onAskFollowUp,
   });
+
+  @override
+  State<_SessionHistoryStrip> createState() => _SessionHistoryStripState();
+}
+
+class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
+  final FlutterTts _tts = FlutterTts();
+  bool _isSpeaking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tts.setLanguage('en-US');
+    _tts.setSpeechRate(0.48);   // slightly slower than default — more coach-like
+    _tts.setVolume(1.0);
+    _tts.setPitch(1.0);
+
+    // Stop speaking when playback completes naturally
+    _tts.setCompletionHandler(() {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+
+    // Stop speaking on error
+    _tts.setErrorHandler((msg) {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+  }
+
+  @override
+  void didUpdateWidget(_SessionHistoryStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Stop TTS if the expanded session changed or panel collapsed
+    if (oldWidget.expandedSession?.id != widget.expandedSession?.id) {
+      _stopSpeaking();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  Future<void> _toggleSpeaking(String text) async {
+    if (_isSpeaking) {
+      await _stopSpeaking();
+    } else {
+      await _startSpeaking(text);
+    }
+  }
+
+  Future<void> _startSpeaking(String text) async {
+    setState(() => _isSpeaking = true);
+    await _tts.speak(text);
+  }
+
+  Future<void> _stopSpeaking() async {
+    await _tts.stop();
+    if (mounted) setState(() => _isSpeaking = false);
+  }
 
   IconData _iconFor(String exercise) {
     switch (exercise) {
@@ -290,7 +346,7 @@ class _SessionHistoryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<WorkoutSession>>(
-      stream: sessionService.sessionsStream(),
+      stream: widget.sessionService.sessionsStream(),
       builder: (context, snapshot) {
         final sessions = snapshot.data ?? [];
         if (sessions.isEmpty) return const SizedBox.shrink();
@@ -320,11 +376,12 @@ class _SessionHistoryStrip extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: sessions.length,
                 itemBuilder: (context, index) {
-                  final session  = sessions[index];
-                  final isExpanded = expandedSession?.id == session.id;
+                  final session    = sessions[index];
+                  final isExpanded =
+                      widget.expandedSession?.id == session.id;
 
                   return GestureDetector(
-                    onTap: () => onSessionTap(session),
+                    onTap: () => widget.onSessionTap(session),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.only(right: 10),
@@ -385,8 +442,8 @@ class _SessionHistoryStrip extends StatelessWidget {
               ),
             ),
 
-            // Expanded debrief panel — appears below strip when a card is tapped
-            if (expandedSession != null)
+            // ── Expanded debrief panel ─────────────────────────────────────
+            if (widget.expandedSession != null)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -400,34 +457,71 @@ class _SessionHistoryStrip extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+
+                    // Header row with title + play/stop button
                     Row(
                       children: [
                         const Icon(Icons.record_voice_over,
                             color: Color(0xFFFF5E00), size: 16),
                         const SizedBox(width: 8),
-                        Text(
-                          '${expandedSession!.exerciseDisplayName} Debrief',
-                          style: const TextStyle(
-                            color: Color(0xFFFF5E00),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            '${widget.expandedSession!.exerciseDisplayName} Debrief',
+                            style: const TextStyle(
+                              color: Color(0xFFFF5E00),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        // ── TTS play/stop button ───────────────────────────
+                        GestureDetector(
+                          onTap: () => _toggleSpeaking(
+                              widget.expandedSession!.debriefText),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: _isSpeaking
+                                  ? const Color(0xFFFF5E00)
+                                  : const Color(0xFFFF5E00).withOpacity(0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFFF5E00).withOpacity(0.6),
+                              ),
+                            ),
+                            child: Icon(
+                              _isSpeaking
+                                  ? Icons.stop_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: _isSpeaking
+                                  ? Colors.white
+                                  : const Color(0xFFFF5E00),
+                              size: 20,
+                            ),
                           ),
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 10),
+
+                    // Debrief text
                     Text(
-                      expandedSession!.debriefText,
+                      widget.expandedSession!.debriefText,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         height: 1.6,
                       ),
                     ),
+
                     const SizedBox(height: 12),
+
                     // Ask follow-up button
                     GestureDetector(
-                      onTap: () => onAskFollowUp(expandedSession!),
+                      onTap: () =>
+                          widget.onAskFollowUp(widget.expandedSession!),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 8),
@@ -435,7 +529,8 @@ class _SessionHistoryStrip extends StatelessWidget {
                           color: const Color(0xFFB9FF2B).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: const Color(0xFFB9FF2B).withOpacity(0.4)),
+                              color:
+                                  const Color(0xFFB9FF2B).withOpacity(0.4)),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -467,7 +562,7 @@ class _SessionHistoryStrip extends StatelessWidget {
   }
 }
 
-// ── Chat Bubble (unchanged from original) ────────────────────────────────
+// ── Chat Bubble ───────────────────────────────────────────────────────────
 class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;
@@ -482,7 +577,8 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isJsonFormat =
-        text.trimLeft().startsWith('[') || text.trimLeft().startsWith('```json');
+        text.trimLeft().startsWith('[') ||
+        text.trimLeft().startsWith('```json');
 
     if (!isUser && isStreaming && isJsonFormat) {
       return const _CardGenerationPlaceholder();
@@ -505,15 +601,12 @@ class _ChatBubble extends StatelessWidget {
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? const Color(0xFFB9FF2B)
-              : const Color(0xFF1A1A1A),
+          color: isUser ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -576,7 +669,7 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-// ── Card Deck (unchanged from original) ──────────────────────────────────
+// ── Card Deck ─────────────────────────────────────────────────────────────
 class _CardDeck extends StatefulWidget {
   final List<Map<String, dynamic>> cards;
   const _CardDeck({required this.cards});
@@ -608,12 +701,10 @@ class _CardDeckState extends State<_CardDeck> {
           icon: const Icon(Icons.refresh, color: Color(0xFFFF5E00)),
           label: const Text('Review Cards Again',
               style: TextStyle(
-                  color: Color(0xFFFF5E00),
-                  fontWeight: FontWeight.bold)),
+                  color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)),
           style: TextButton.styleFrom(
             backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
           ),
@@ -640,8 +731,7 @@ class _CardDeckState extends State<_CardDeck> {
           if (index == 0) {
             inner = Dismissible(
               key: UniqueKey(),
-              onDismissed: (_) =>
-                  setState(() => _currentCards.removeAt(0)),
+              onDismissed: (_) => setState(() => _currentCards.removeAt(0)),
               child: inner,
             );
           }
@@ -656,9 +746,9 @@ class _CardDeckState extends State<_CardDeck> {
   }
 
   Widget _buildCardContent(Map<String, dynamic> card) {
-    final title       = card['title']       ?? card['name']   ?? card['step']   ?? 'Detail';
+    final title       = card['title']       ?? card['name']        ?? card['step']    ?? 'Detail';
     final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
-    final badge       = card['badge']       ?? card['impact'] ?? card['muscle_group'] ?? card['confidence'];
+    final badge       = card['badge']       ?? card['impact']      ?? card['muscle_group'] ?? card['confidence'];
 
     return Container(
       decoration: BoxDecoration(
@@ -674,7 +764,7 @@ class _CardDeckState extends State<_CardDeck> {
             color: const Color(0xFFFF5E00).withOpacity(0.25),
             blurRadius: 15,
             offset: const Offset(0, 8),
-          )
+          ),
         ],
       ),
       padding: const EdgeInsets.all(24),

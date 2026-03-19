@@ -61,6 +61,8 @@ dependencies:
   intl: ^0.20.2
   firebase_app_check: ^0.4.1+4
 
+  flutter_tts: ^4.0.2
+
   mobile_scanner: ^5.0.0  # Barcode scanning for snack packages
   image_picker: ^1.1.2  # Pick image from camera or gallery for meal photos
   google_generative_ai: ^0.4.6  # Free Gemini API 
