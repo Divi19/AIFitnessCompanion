@@ -56,13 +56,13 @@ class WorkoutSession {
     return m > 0 ? '${m}m ${s}s' : '${s}s';
   }
 
-  // One-line preview — first sentence of the debrief
+  // Two-sentence preview shown on the session card
   String get debriefPreview {
-    final sentences = debriefText.split(RegExp(r'[.!]'));
-    final first = sentences.firstWhere((s) => s.trim().length > 10, orElse: () => debriefText);
-    return first.trim().length > 80
-        ? '${first.trim().substring(0, 80)}...'
-        : first.trim();
+    final sentences = debriefText.split(RegExp(r'(?<=[.!?])\s+'));
+    final preview = sentences.take(2).join(' ').trim();
+    return preview.length > 120
+        ? '${preview.substring(0, 120)}...'
+        : preview;
   }
 
   factory WorkoutSession.fromFirestore(DocumentSnapshot doc) {
@@ -204,19 +204,20 @@ Session Data:
 Form feedback received during session (most frequent first):
 $feedbackBlock
 
-Write a 2-3 sentence spoken debrief. Rules:
-- Be encouraging and conversational, like a real coach
-- Address the most frequent form issue directly
-- If they have physical limitations, flag if any form issue could aggravate them
-- End with ONE specific actionable tip for next session
-- Do NOT use bullet points, headers, or markdown — plain spoken sentences only
-- Keep it under 60 words total so it reads well as audio
+Write a spoken coaching debrief of around 100-150 words. Rules:
+- Structure it in this order: (1) quick overall performance summary, (2) what they did well or maintained, (3) the top 1-2 form issues to work on and WHY they matter, (4) one specific actionable drill or cue for next session
+- If feedbackMap is empty, acknowledge their clean form and focus on progression tips instead
+- If they have physical limitations, flag if any form issue could aggravate them and suggest a safer modification
+- Be encouraging and direct — like a real coach talking after a session, not a report
+- Do NOT use bullet points, headers, numbers, or markdown — plain flowing sentences only
+- Do NOT start with "Great job" or generic praise — open with something specific to their session
+- Keep it natural and conversational so it sounds good when read aloud
 ''';
 
     try {
       final response = await http.post(
         Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${AppConstants.geminiApiKey}',
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AppConstants.geminiApiKey}',
         ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -224,9 +225,14 @@ Write a 2-3 sentence spoken debrief. Rules:
         }),
       );
 
+      debugPrint('=== DEBRIEF: status=${response.statusCode} ===');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'] as String;
+        final text = data['candidates'][0]['content']['parts'][0]['text'] as String;
+        debugPrint('=== DEBRIEF: generated ${text.length} chars ===');
+        return text;
+      } else {
+        debugPrint('=== DEBRIEF FAILED: ${response.statusCode} body=${response.body} ===');
       }
     } catch (e) {
       debugPrint('Debrief generation error: $e');
