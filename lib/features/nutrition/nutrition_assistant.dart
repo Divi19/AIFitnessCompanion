@@ -506,13 +506,22 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                     const SizedBox(height: 10),
 
-                    // Debrief text
-                    Text(
-                      widget.expandedSession!.debriefText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        height: 1.6,
+                    // Full debrief text — readable as a coaching report
+                    // or listenable via the play button above
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        widget.expandedSession!.debriefText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.7,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
                     ),
 
