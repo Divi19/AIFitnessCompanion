@@ -273,9 +273,9 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   void initState() {
     super.initState();
     _tts.setLanguage('en-US');
-    _tts.setSpeechRate(0.48);   // slightly slower than default — more coach-like
+    _tts.setSpeechRate(0.58);   // faster — more coach energy, less robotic
     _tts.setVolume(1.0);
-    _tts.setPitch(1.0);
+    _tts.setPitch(1.15);        // slightly higher pitch — more dynamic and engaging
 
     // Stop speaking when playback completes naturally
     _tts.setCompletionHandler(() {
