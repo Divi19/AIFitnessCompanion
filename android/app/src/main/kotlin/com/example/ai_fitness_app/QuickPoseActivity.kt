@@ -46,6 +46,16 @@ class QuickPoseActivity : ComponentActivity() {
     private var lastBroadcastedRepCount = 0  // Stores last known count so missed frames don't reset to 0
     private var lastBroadcastedFeedback  = "" // Stores last known feedback for same reason
 
+    // Tracks whether the user is currently at proper depth
+    // Used to drive the visual rep quality indicator
+    private var isAtProperDepth = false
+
+    // Proper depth threshold — signal must drop below this value
+    // to be considered at full depth. Matches exitThreshold on the counter.
+    // 0.3 gives a slightly generous window so the indicator lights up
+    // just before the counter commits the rep.
+    private val DEPTH_THRESHOLD = 0.3f
+
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
     private lateinit var exerciseLabel: TextView
@@ -80,8 +90,6 @@ class QuickPoseActivity : ComponentActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         root.addView(cameraView, cameraParams)
-        // Force overlay to render on top of camera preview consistently
-        cameraView.setZOrderMediaOverlay(true)
         
         // Back button
         val backBtn = ImageButton(this).apply {
@@ -180,6 +188,7 @@ class QuickPoseActivity : ComponentActivity() {
             counter.reset()
             lastBroadcastedRepCount = 0
             lastBroadcastedFeedback = ""
+            isAtProperDepth         = false
             quickPose.stop()
             runOnUiThread {
                 repCountText.text       = "0"
@@ -216,40 +225,88 @@ class QuickPoseActivity : ComponentActivity() {
         else           -> name
     }
 
-    private fun startQuickPose(exerciseName: String) {
+private fun startQuickPose(exerciseName: String) {
         lifecycleScope.launch {
             cameraView.start(useFrontCamera = true)
 
             quickPose.start(
                 arrayOf(featureFor(exerciseName)),
                 onFrame = { status, _, features, feedback, _ ->
+
                     val statusStr = if (status is Status.Success) "success" else "loading"
 
-                    // Only update rep count if QuickPose actually detected the body this frame.
-                    // If features is null/empty (skeleton lost), we keep the last known count
+                    // ── FORM CHECK ────────────────────────────────────────────
+                    // QuickPose sets isRequired = true on feedback items that
+                    // represent a critical form error the user must fix.
+                    // We block rep counting entirely while any required feedback
+                    // is active — bad form reps simply don't count.
+                    val hasRequiredFormIssue = feedback?.values?.any {
+                        it.isRequired == true
+                    } ?: false
+
+                    // ── FEATURE PROCESSING ────────────────────────────────────
                     if (features != null && features.isNotEmpty()) {
                         features.forEach { (feature, result) ->
                             if (feature is Feature.Fitness && result.value != null) {
-                                val newCount = counter.count(result.value).count
-                                if (newCount != lastBroadcastedRepCount) {
-                                    // Count changed — update UI and broadcast immediately
-                                    lastBroadcastedRepCount = newCount
+
+                                // Depth indicator — true when signal is in bottom range.
+                                // We check this regardless of form so the indicator still
+                                // shows the user they reached depth, even if form blocked
+                                // the count — helpful for learning correct positioning.
+                                isAtProperDepth = result.value <= DEPTH_THRESHOLD
+
+                                if (!hasRequiredFormIssue) {
+                                    // Form is clean — allow rep counting
+                                    val newCount = counter.count(result.value).count
+                                    if (newCount != lastBroadcastedRepCount) {
+                                        lastBroadcastedRepCount = newCount
+                                        runOnUiThread {
+                                            repCountText.text = newCount.toString()
+                                            updateRepCounterStyle(
+                                                isAtDepth   = isAtProperDepth,
+                                                formBlocked = false
+                                            )
+                                        }
+                                    } else {
+                                        // Count unchanged — just update visual style
+                                        runOnUiThread {
+                                            updateRepCounterStyle(
+                                                isAtDepth   = isAtProperDepth,
+                                                formBlocked = false
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // Form issue active — counter is frozen.
+                                    // Turn counter orange so user knows a form
+                                    // correction is blocking the count.
                                     runOnUiThread {
-                                        repCountText.text = newCount.toString()
+                                        updateRepCounterStyle(
+                                            isAtDepth   = false,
+                                            formBlocked = true
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                    // If features is null, we intentionally do nothing  UI keeps showing
-                    // lastBroadcastedRepCount which is still displayed from the previous setState
+                    // If features is null (body lost), keep showing last known
+                    // count — do not reset to 0.
 
-                    // Feedback: only update if it actually changed
+                    // ── FEEDBACK PROCESSING ───────────────────────────────────
                     val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
                     if (feedbackMsg != lastBroadcastedFeedback) {
                         lastBroadcastedFeedback = feedbackMsg
                         runOnUiThread {
                             if (feedbackMsg.isNotEmpty()) {
+                                // Required feedback = red banner (critical error)
+                                // Advisory feedback = orange banner (suggestion)
+                                feedbackText.setBackgroundColor(
+                                    if (hasRequiredFormIssue)
+                                        Color.argb(200, 220, 50, 50)   // Red
+                                    else
+                                        Color.argb(200, 255, 94, 0)    // Orange
+                                )
                                 feedbackText.text       = feedbackMsg
                                 feedbackText.visibility = View.VISIBLE
                             } else {
@@ -258,15 +315,33 @@ class QuickPoseActivity : ComponentActivity() {
                         }
                     }
 
-                    // Only broadcast when something actually changed reduces noise to Flutter
+                    // ── BROADCAST TO FLUTTER ──────────────────────────────────
                     sendBroadcast(Intent(ACTION_RESULT).apply {
-                        putExtra(EXTRA_REP_COUNT, lastBroadcastedRepCount)
-                        putExtra(EXTRA_FEEDBACK,  lastBroadcastedFeedback)
-                        putExtra(EXTRA_STATUS,    statusStr)
+                        putExtra(EXTRA_REP_COUNT,   lastBroadcastedRepCount)
+                        putExtra(EXTRA_FEEDBACK,    lastBroadcastedFeedback)
+                        putExtra(EXTRA_STATUS,      statusStr)
+                        putExtra("isAtProperDepth", isAtProperDepth)
+                        putExtra("formIssueActive", hasRequiredFormIssue)
                         setPackage(packageName)
                     })
                 }
             )
         }
     }
+
+
+/// Updates the rep counter text color based on current exercise state.
+///
+/// isAtDepth = true  → Lime green (user hit proper depth, good rep)
+/// formBlocked = true → Orange    (form issue is blocking the count)
+/// default            → White     (neutral / returning to start position)
+private fun updateRepCounterStyle(isAtDepth: Boolean, formBlocked: Boolean) {
+    repCountText.setTextColor(
+        when {
+            formBlocked -> Color.rgb(255, 94, 0)    // Orange — form blocking count
+            isAtDepth   -> Color.rgb(185, 255, 43)  // Lime green — proper depth reached
+            else        -> Color.rgb(255, 255, 255) // White — neutral position
+        }
+    )
+}
 }
