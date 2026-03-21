@@ -41,7 +41,7 @@ class QuickPoseActivity : ComponentActivity() {
         enterThreshold = 0.8f,
         exitThreshold  = 0.2f
     )
-    
+
     private var currentExercise = "squat"
     private var lastBroadcastedRepCount = 0  // Stores last known count so missed frames don't reset to 0
     private var lastBroadcastedFeedback  = "" // Stores last known feedback for same reason
@@ -54,6 +54,9 @@ class QuickPoseActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setDecorFitsSystemWindows(false)
+
+        // Force the SurfaceView to render on top without competing with the window compositor
+        window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
         
         currentExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: "squat"
         
@@ -72,11 +75,14 @@ class QuickPoseActivity : ComponentActivity() {
         root.setBackgroundColor(Color.BLACK)
 
         // Add the locally created camera view directly to the root
-        root.addView(cameraView, FrameLayout.LayoutParams(
+        val cameraParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
-        ))
-
+        )
+        root.addView(cameraView, cameraParams)
+        // Force overlay to render on top of camera preview consistently
+        cameraView.setZOrderMediaOverlay(true)
+        
         // Back button
         val backBtn = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
