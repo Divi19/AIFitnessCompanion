@@ -24,8 +24,6 @@ class _NutritionAssistantScreenState
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
-  WorkoutSession? _expandedSession;
-
   Future<void> _sendMessage({String? overrideText}) async {
     final question = overrideText ?? _controller.text.trim();
     if (question.isEmpty || _isLoading) return;
@@ -47,7 +45,6 @@ class _NutritionAssistantScreenState
 
     try {
       final recentSessions = await _sessionService.getRecentSessions(limit: 3);
-
       final stream = _ragService.query(
         userQuestion:   question,
         userId:         userId,
@@ -63,8 +60,7 @@ class _NutritionAssistantScreenState
         setState(() {
           if (isFirstChunk) {
             _isLoading = false;
-            _messages.add(
-                {'role': 'assistant', 'text': chunk, 'isStreaming': true});
+            _messages.add({'role': 'assistant', 'text': chunk, 'isStreaming': true});
             isFirstChunk = false;
           } else {
             final lastIndex   = _messages.length - 1;
@@ -107,6 +103,28 @@ class _NutritionAssistantScreenState
     });
   }
 
+  // Shows the full-page debrief bottom sheet
+  void _showDebriefSheet(
+      BuildContext context, WorkoutSession session, WorkoutSessionService service) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DebriefSheet(
+        session: session,
+        onAskFollowUp: (s) {
+          Navigator.of(context).pop();
+          _sendMessage(
+            overrideText:
+                'Based on my ${s.exerciseDisplayName} session where I did '
+                '${s.reps} reps, ${s.debriefText} '
+                'What should I focus on to improve next time?',
+          );
+        },
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -139,28 +157,14 @@ class _NutritionAssistantScreenState
       body: Column(
         children: [
 
-          // ── Session History Strip ────────────────────────────────────────
+          // ── Session History Strip (day-grouped) ──────────────────────
           _SessionHistoryStrip(
-            sessionService:  _sessionService,
-            expandedSession: _expandedSession,
-            onSessionTap: (session) {
-              setState(() {
-                _expandedSession =
-                    _expandedSession?.id == session.id ? null : session;
-              });
-            },
-            onAskFollowUp: (session) {
-              setState(() => _expandedSession = null);
-              _sendMessage(
-                overrideText:
-                    'Based on my ${session.exerciseDisplayName} session where I did '
-                    '${session.reps} reps, ${session.debriefText} '
-                    'What should I focus on to improve next time?',
-              );
-            },
+            sessionService: _sessionService,
+            onSessionTap: (session) =>
+                _showDebriefSheet(context, session, _sessionService),
           ),
 
-          // ── Chat Messages ────────────────────────────────────────────────
+          // ── Chat Messages ────────────────────────────────────────────
           Expanded(
             child: _messages.isEmpty
                 ? Center(
@@ -174,7 +178,7 @@ class _NutritionAssistantScreenState
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Tap a session above to ask about your form',
+                          'Tap a session above to hear your debrief',
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.25),
                               fontSize: 13),
@@ -200,7 +204,7 @@ class _NutritionAssistantScreenState
                   ),
           ),
 
-          // ── Input Bar ────────────────────────────────────────────────────
+          // ── Input Bar ────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -224,9 +228,7 @@ class _NutritionAssistantScreenState
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: _isLoading
-                        ? Colors.transparent
-                        : const Color(0xFFB9FF2B),
+                    color: _isLoading ? Colors.transparent : const Color(0xFFB9FF2B),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
@@ -244,81 +246,44 @@ class _NutritionAssistantScreenState
   }
 }
 
-// ── Session History Strip ─────────────────────────────────────────────────
-// StatefulWidget so it can own the FlutterTts instance and speaking state.
-// TTS lives here rather than in the parent so it's tied to the debrief panel
-// lifecycle — stops automatically when the panel collapses.
-class _SessionHistoryStrip extends StatefulWidget {
+// ── Session History Strip — day-grouped ───────────────────────────────────
+class _SessionHistoryStrip extends StatelessWidget {
   final WorkoutSessionService sessionService;
-  final WorkoutSession? expandedSession;
   final void Function(WorkoutSession) onSessionTap;
-  final void Function(WorkoutSession) onAskFollowUp;
 
   const _SessionHistoryStrip({
     required this.sessionService,
-    required this.expandedSession,
     required this.onSessionTap,
-    required this.onAskFollowUp,
   });
 
-  @override
-  State<_SessionHistoryStrip> createState() => _SessionHistoryStripState();
-}
+  // Groups a flat list of sessions into an ordered map of dayLabel → sessions
+  Map<String, List<WorkoutSession>> _groupByDay(List<WorkoutSession> sessions) {
+    final now   = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
-  final FlutterTts _tts = FlutterTts();
-  bool _isSpeaking = false;
+    final Map<String, List<WorkoutSession>> groups = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _tts.setLanguage('en-US');
-    _tts.setSpeechRate(0.58);   // faster — more coach energy, less robotic
-    _tts.setVolume(1.0);
-    _tts.setPitch(1.15);        // slightly higher pitch — more dynamic and engaging
+    for (final s in sessions) {
+      final d    = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final diff = today.difference(d).inDays;
 
-    // Stop speaking when playback completes naturally
-    _tts.setCompletionHandler(() {
-      if (mounted) setState(() => _isSpeaking = false);
-    });
+      final String label;
+      if (diff == 0) {
+        label = 'Today';
+      } else if (diff == 1) {
+        label = 'Yesterday';
+      } else {
+        // e.g. "Mon 18 Mar"
+        const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const months   = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        label = '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
+      }
 
-    // Stop speaking on error
-    _tts.setErrorHandler((msg) {
-      if (mounted) setState(() => _isSpeaking = false);
-    });
-  }
-
-  @override
-  void didUpdateWidget(_SessionHistoryStrip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Stop TTS if the expanded session changed or panel collapsed
-    if (oldWidget.expandedSession?.id != widget.expandedSession?.id) {
-      _stopSpeaking();
+      groups.putIfAbsent(label, () => []).add(s);
     }
-  }
 
-  @override
-  void dispose() {
-    _tts.stop();
-    super.dispose();
-  }
-
-  Future<void> _toggleSpeaking(String text) async {
-    if (_isSpeaking) {
-      await _stopSpeaking();
-    } else {
-      await _startSpeaking(text);
-    }
-  }
-
-  Future<void> _startSpeaking(String text) async {
-    setState(() => _isSpeaking = true);
-    await _tts.speak(text);
-  }
-
-  Future<void> _stopSpeaking() async {
-    await _tts.stop();
-    if (mounted) setState(() => _isSpeaking = false);
+    return groups;
   }
 
   IconData _iconFor(String exercise) {
@@ -346,17 +311,19 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<WorkoutSession>>(
-      stream: widget.sessionService.sessionsStream(),
+      stream: sessionService.sessionsStream(),
       builder: (context, snapshot) {
         final sessions = snapshot.data ?? [];
         if (sessions.isEmpty) return const SizedBox.shrink();
+
+        final groups = _groupByDay(sessions);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Section header
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Text(
                 'RECENT SESSIONS',
                 style: TextStyle(
@@ -368,200 +335,233 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // Horizontal scroll of session cards
-            SizedBox(
-              height: 88,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: sessions.length,
-                itemBuilder: (context, index) {
-                  final session    = sessions[index];
-                  final isExpanded =
-                      widget.expandedSession?.id == session.id;
+            // One row per day
+            ...groups.entries.map((entry) {
+              final dayLabel     = entry.key;
+              final daySessions  = entry.value;
 
-                  return GestureDetector(
-                    onTap: () => widget.onSessionTap(session),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(right: 10),
-                      width: 140,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isExpanded
-                            ? const Color(0xFFFF5E00).withOpacity(0.15)
-                            : const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isExpanded
-                              ? const Color(0xFFFF5E00)
-                              : Colors.white12,
-                          width: isExpanded ? 1.5 : 1,
-                        ),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Day label
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      dayLabel,
+                      style: const TextStyle(
+                        color: Color(0xFFB9FF2B),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
                       ),
+                    ),
+                  ),
+
+                  // Horizontal scroll of session cards for this day
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: daySessions.length,
+                      itemBuilder: (context, index) {
+                        final session = daySessions[index];
+                        return GestureDetector(
+                          onTap: () => onSessionTap(session),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 10),
+                            width: 140,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A1A1A),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(_iconFor(session.exercise),
+                                        color: const Color(0xFFB9FF2B),
+                                        size: 14),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        session.exerciseDisplayName,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${session.reps} reps · ${session.durationFormatted}',
+                                  style: const TextStyle(
+                                      color: Colors.white54, fontSize: 11),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  session.timeAgo,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.3),
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }),
+
+            const Divider(color: Colors.white10, height: 1),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Full-page debrief bottom sheet ────────────────────────────────────────
+class _DebriefSheet extends StatefulWidget {
+  final WorkoutSession session;
+  final void Function(WorkoutSession) onAskFollowUp;
+
+  const _DebriefSheet({
+    required this.session,
+    required this.onAskFollowUp,
+  });
+
+  @override
+  State<_DebriefSheet> createState() => _DebriefSheetState();
+}
+
+class _DebriefSheetState extends State<_DebriefSheet> {
+  final FlutterTts _tts = FlutterTts();
+  bool _isSpeaking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tts.setLanguage('en-US');
+    _tts.setSpeechRate(0.58);
+    _tts.setVolume(1.0);
+    _tts.setPitch(1.15);
+    _tts.setCompletionHandler(() {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+    _tts.setErrorHandler((_) {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  Future<void> _toggleSpeaking() async {
+    if (_isSpeaking) {
+      await _tts.stop();
+      setState(() => _isSpeaking = false);
+    } else {
+      setState(() => _isSpeaking = true);
+      await _tts.speak(widget.session.debriefText);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF111111),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // Drag handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.record_voice_over,
+                        color: Color(0xFFFF5E00), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(_iconFor(session.exercise),
-                                  color: const Color(0xFFB9FF2B), size: 14),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  session.exerciseDisplayName,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
                           Text(
-                            '${session.reps} reps · ${session.durationFormatted}',
+                            '${widget.session.exerciseDisplayName} Debrief',
                             style: const TextStyle(
-                                color: Colors.white54, fontSize: 11),
-                          ),
-                          const Spacer(),
-                          Text(
-                            session.timeAgo,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.3),
-                              fontSize: 10,
+                              color: Color(0xFFFF5E00),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
                             ),
+                          ),
+                          Text(
+                            '${widget.session.reps} reps · '
+                            '${widget.session.durationFormatted} · '
+                            '${widget.session.timeAgo}',
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 12),
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-
-            // ── Expanded debrief panel ─────────────────────────────────────
-            if (widget.expandedSession != null)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: const Color(0xFFFF5E00).withOpacity(0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    // Header row with title + play/stop button
-                    Row(
-                      children: [
-                        const Icon(Icons.record_voice_over,
-                            color: Color(0xFFFF5E00), size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${widget.expandedSession!.exerciseDisplayName} Debrief',
-                            style: const TextStyle(
-                              color: Color(0xFFFF5E00),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        // ── TTS play/stop button ───────────────────────────
-                        GestureDetector(
-                          onTap: () => _toggleSpeaking(
-                              widget.expandedSession!.debriefText),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: _isSpeaking
-                                  ? const Color(0xFFFF5E00)
-                                  : const Color(0xFFFF5E00).withOpacity(0.15),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFFF5E00).withOpacity(0.6),
-                              ),
-                            ),
-                            child: Icon(
-                              _isSpeaking
-                                  ? Icons.stop_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: _isSpeaking
-                                  ? Colors.white
-                                  : const Color(0xFFFF5E00),
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Full debrief text — constrained height with scroll
-                    // so long debriefs don't overflow the screen
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            widget.expandedSession!.debriefText,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              height: 1.7,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Ask follow-up button
+                    // Play / stop button
                     GestureDetector(
-                      onTap: () =>
-                          widget.onAskFollowUp(widget.expandedSession!),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 8),
+                      onTap: _toggleSpeaking,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFB9FF2B).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
+                          color: _isSpeaking
+                              ? const Color(0xFFFF5E00)
+                              : const Color(0xFFFF5E00).withOpacity(0.15),
+                          shape: BoxShape.circle,
                           border: Border.all(
-                              color:
-                                  const Color(0xFFB9FF2B).withOpacity(0.4)),
+                              color: const Color(0xFFFF5E00).withOpacity(0.6)),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.chat_bubble_outline,
-                                color: Color(0xFFB9FF2B), size: 14),
-                            SizedBox(width: 6),
-                            Text(
-                              'Ask the coach about this session',
-                              style: TextStyle(
-                                color: Color(0xFFB9FF2B),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                        child: Icon(
+                          _isSpeaking
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                          color: _isSpeaking
+                              ? Colors.white
+                              : const Color(0xFFFF5E00),
+                          size: 22,
                         ),
                       ),
                     ),
@@ -569,8 +569,64 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                 ),
               ),
 
-            const Divider(color: Colors.white10, height: 1),
-          ],
+              const SizedBox(height: 12),
+              const Divider(color: Colors.white10, height: 1),
+              const SizedBox(height: 16),
+
+              // Debrief text — scrollable, fills the page
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: Text(
+                    widget.session.debriefText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      height: 1.75,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Ask the coach button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: GestureDetector(
+                    onTap: () => widget.onAskFollowUp(widget.session),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFFB9FF2B).withOpacity(0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_outline,
+                              color: Color(0xFFB9FF2B), size: 16),
+                          SizedBox(width: 8),
+                          Text(
+                            'Ask the coach about this session',
+                            style: TextStyle(
+                              color: Color(0xFFB9FF2B),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -763,7 +819,8 @@ class _CardDeckState extends State<_CardDeck> {
   Widget _buildCardContent(Map<String, dynamic> card) {
     final title       = card['title']       ?? card['name']        ?? card['step']    ?? 'Detail';
     final description = card['description'] ?? card['instruction'] ?? card['details'] ?? '';
-    final badge       = card['badge']       ?? card['impact']      ?? card['muscle_group'] ?? card['confidence'];
+    final badge       = card['badge']       ?? card['impact']      ??
+                        card['muscle_group'] ?? card['confidence'];
 
     return Container(
       decoration: BoxDecoration(
