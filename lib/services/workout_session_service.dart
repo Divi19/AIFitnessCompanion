@@ -234,12 +234,14 @@ class WorkoutSessionService {
         .doc(uid)
         .collection('workout_sessions')
         .where('exercise', isEqualTo: exercise)
-        .orderBy('timestamp')
-        .get();
+        .get();  // no orderBy — sort client-side to avoid composite index requirement
 
     if (snapshot.docs.isEmpty) return [];
 
-    final sessions = snapshot.docs.map(WorkoutSession.fromFirestore).toList();
+    final sessions = snapshot.docs
+        .map(WorkoutSession.fromFirestore)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // oldest → newest
 
     final points   = <SetTrendPoint>[];
     DateTime? lastDay;
