@@ -110,11 +110,9 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ── KEY FIX: Use a Stack with Visibility instead of IndexedStack
-      // with conditional rendering. This keeps WorkoutTrackerScreen alive
-      // in the widget tree at all times so the native QuickPose view is
-      // never disposed when switching tabs. Visibility hides it visually
-      // and IgnorePointer blocks touches when not on that tab.
+      // Uses Visibility + IgnorePointer instead of IndexedStack so that
+      // WorkoutTrackerScreen stays alive in the tree at all times —
+      // the native QuickPose camera view is never disposed on tab switch.
       body: Stack(
         children: [
           _buildTab(0, const HomeDashboardTab()),
@@ -153,12 +151,11 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
     );
   }
 
-  // Helper that shows a tab when selected and hides it otherwise,
-  // but crucially never removes it from the tree so native views stay alive.
+  // Keeps every tab alive in the tree; hides and ignores input when not active
   Widget _buildTab(int index, Widget child) {
     return Visibility(
       visible: _currentIndex == index,
-      maintainState: true,   // keep state alive when hidden
+      maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
       child: IgnorePointer(
@@ -257,36 +254,30 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
           final data =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          final name = data['name'] ?? 'Athlete';
+          final name   = data['name']          ?? 'Athlete';
           final streak = data['current_streak'] ?? 0;
           final fatigue = data['fatigue_score'] ?? 5;
 
-          final bodyStats =
-              data['body_stats'] as Map<String, dynamic>? ?? {};
-          final healthInsights =
-              data['health_insights'] as Map<String, dynamic>? ?? {};
+          final bodyStats     = data['body_stats']      as Map<String, dynamic>? ?? {};
+          final healthInsights = data['health_insights'] as Map<String, dynamic>? ?? {};
 
-          final currentWeightStr =
-              bodyStats['weight']?.toString() ?? '-- kg';
-          final unit =
-              currentWeightStr.contains('lbs') ? 'lbs' : 'kg';
+          final currentWeightStr = bodyStats['weight']?.toString() ?? '-- kg';
+          final unit = currentWeightStr.contains('lbs') ? 'lbs' : 'kg';
 
           final targetWeightRaw = bodyStats['target_weight']?.toString();
           final targetWeightStr = targetWeightRaw != null
-              ? (targetWeightRaw.contains('kg') ||
-                      targetWeightRaw.contains('lbs')
+              ? (targetWeightRaw.contains('kg') || targetWeightRaw.contains('lbs')
                   ? targetWeightRaw
                   : '$targetWeightRaw $unit')
               : currentWeightStr;
 
-          final recommendedCalories =
-              healthInsights['suggested_calories'] ?? 2000;
+          final recommendedCalories = healthInsights['suggested_calories'] ?? 2000;
 
           final fatigueColor = fatigue > 7
               ? const Color(0xFFFF5E00)
               : const Color(0xFFB9FF2B);
 
-          final now = DateTime.now();
+          final now   = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
 
           return StreamBuilder<QuerySnapshot>(
@@ -313,12 +304,12 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               if (calorieProgress > 1.0) calorieProgress = 1.0;
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Greeting ─────────────────────────────────────────
+
+                    // ── Greeting ──────────────────────────────────────────
                     Center(
                       child: Column(
                         children: [
@@ -353,13 +344,11 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         color: const Color(0xFF1A1A1A),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color:
-                                const Color(0xFFB9FF2B).withOpacity(0.5),
+                            color: const Color(0xFFB9FF2B).withOpacity(0.5),
                             width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                const Color(0xFFB9FF2B).withOpacity(0.15),
+                            color: const Color(0xFFB9FF2B).withOpacity(0.15),
                             blurRadius: 30,
                             spreadRadius: 2,
                           ),
@@ -389,7 +378,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // ── CHANGED: Active Workout Plan ──────────────────────
+                    // ── Active Workout Plan (kevin branch) ────────────────
+                    // Shows real Firestore data — replaces the old hardcoded
+                    // checklist that referenced undefined step1/step2 vars.
                     const Text(
                       "Active Workout Plan:",
                       style: TextStyle(
@@ -398,61 +389,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                           color: Color(0xFFB9FF2B)),
                     ),
                     const SizedBox(height: 12),
-
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Column(
-                        children: [
-                          CheckboxListTile(
-                            title: Text('hit 10k steps',
-                                style: TextStyle(
-                                  color:
-                                      step1 ? Colors.white38 : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: step1
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor: const Color(0xFFFF5E00),
-                                )),
-                            value: step1,
-                            onChanged: (val) =>
-                                setState(() => step1 = val!),
-                            activeColor: const Color(0xFFFF5E00),
-                            checkColor: Colors.white,
-                            controlAffinity:
-                                ListTileControlAffinity.leading,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          const Divider(height: 1, color: Colors.white10),
-                          CheckboxListTile(
-                            title: Text('HIIT workout',
-                                style: TextStyle(
-                                  color:
-                                      step2 ? Colors.white38 : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: step2
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor: const Color(0xFFFF5E00),
-                                )),
-                            value: step2,
-                            onChanged: (val) =>
-                                setState(() => step2 = val!),
-                            activeColor: const Color(0xFFFF5E00),
-                            checkColor: Colors.white,
-                            controlAffinity:
-                                ListTileControlAffinity.leading,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildActiveWorkoutCard(context, uid),
 
                     const SizedBox(height: 32),
 
@@ -471,8 +408,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                const Color(0xFFFF5E00).withOpacity(0.3),
+                            color: const Color(0xFFFF5E00).withOpacity(0.3),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
@@ -485,16 +421,14 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (_) =>
-                                    const WorkoutBuilderScreen()),
+                                builder: (_) => const WorkoutBuilderScreen()),
                           ),
                           child: const Padding(
                             padding: EdgeInsets.symmetric(
                                 vertical: 24, horizontal: 24),
                             child: Column(
                               children: [
-                                Icon(Icons.bolt,
-                                    size: 36, color: Colors.white),
+                                Icon(Icons.bolt, size: 36, color: Colors.white),
                                 SizedBox(height: 12),
                                 Text(
                                   'Generate Routine',
@@ -513,7 +447,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 32),
 
-                    // Calories Progress Bar
+                    // ── Calories Progress Bar ─────────────────────────────
                     const Text(
                       "Calories Intake:",
                       style: TextStyle(
@@ -553,7 +487,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
                     const SizedBox(height: 16),
 
-                    // Scan Meal Button
+                    // ── Scan Meal Button ──────────────────────────────────
                     ElevatedButton.icon(
                       onPressed: () => Navigator.push(
                         context,
@@ -568,8 +502,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         foregroundColor: const Color(0xFFFF5E00),
                         side: BorderSide(
                             color: const Color(0xFFFF5E00).withOpacity(0.5)),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
@@ -589,8 +522,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                             icon: Icons.local_fire_department,
                             bgColor: const Color(0xFFFF5E00).withOpacity(0.15),
                             textColor: const Color(0xFFFF5E00),
-                            borderColor:
-                                const Color(0xFFFF5E00).withOpacity(0.5),
+                            borderColor: const Color(0xFFFF5E00).withOpacity(0.5),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -625,7 +557,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
     );
   }
 
-  // ── ACTIVE WORKOUT PLAN CARD (new — replaces checklist) ──────────────────
+  // ── Active Workout Plan Card (from kevin branch) ──────────────────────────
+  // Reads the most recent workout plan from Firestore and shows progress.
+  // If no plan exists, prompts the user to generate one.
   Widget _buildActiveWorkoutCard(BuildContext context, String uid) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -644,7 +578,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF5E00), strokeWidth: 2),
+              child: CircularProgressIndicator(
+                  color: Color(0xFFFF5E00), strokeWidth: 2),
             ),
           );
         }
@@ -653,7 +588,8 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return GestureDetector(
             onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const WorkoutBuilderScreen())),
+                MaterialPageRoute(
+                    builder: (_) => const WorkoutBuilderScreen())),
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -668,19 +604,27 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.fitness_center, color: Colors.white24, size: 22),
+                  child: const Icon(Icons.fitness_center,
+                      color: Colors.white24, size: 22),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('No Active Plan',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                    SizedBox(height: 3),
-                    Text('Tap to generate your first workout',
-                        style: TextStyle(color: Colors.white38, fontSize: 12)),
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('No Active Plan',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15)),
+                        SizedBox(height: 3),
+                        Text('Tap to generate your first workout',
+                            style:
+                                TextStyle(color: Colors.white38, fontSize: 12)),
+                      ]),
                 ),
-                const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 14),
+                const Icon(Icons.arrow_forward_ios,
+                    color: Colors.white24, size: 14),
               ]),
             ),
           );
@@ -707,27 +651,33 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
 
         return FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance
-              .collection('users').doc(uid)
-              .collection('workout_plans').doc(planId)
+              .collection('users')
+              .doc(uid)
+              .collection('workout_plans')
+              .doc(planId)
               .get(),
           builder: (context, progSnap) {
             double progress = 0.0;
             if (progSnap.hasData && progSnap.data!.exists) {
-              final progData  = progSnap.data!.data() as Map<String, dynamic>? ?? {};
-              final completed = progData['progress'] as Map<String, dynamic>? ?? {};
+              final progData  =
+                  progSnap.data!.data() as Map<String, dynamic>? ?? {};
+              final completed =
+                  progData['progress'] as Map<String, dynamic>? ?? {};
               final done  = completed.values.where((v) => v == true).length;
               final total = completed.length;
               if (total > 0) progress = done / total;
             }
 
             return GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => WorkoutPlanScreen(
-                  plan:   plan['plan'] as String? ?? '',
-                  planId: planId,
-                  uid:    uid,
-                ),
-              )),
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => WorkoutPlanScreen(
+                      plan:   plan['plan'] as String? ?? '',
+                      planId: planId,
+                      uid:    uid,
+                    ),
+                  )),
               child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -739,8 +689,10 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         : const Color(0xFFFF5E00).withOpacity(0.4),
                   ),
                 ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Goal + active badge
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  // Goal + active/expired badge
                   Row(children: [
                     Container(
                       padding: const EdgeInsets.all(9),
@@ -748,16 +700,22 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         color: const Color(0xFFFF5E00).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.fitness_center, color: Color(0xFFFF5E00), size: 20),
+                      child: const Icon(Icons.fitness_center,
+                          color: Color(0xFFFF5E00), size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(goal,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: isExpired
                             ? Colors.red.withOpacity(0.15)
@@ -767,8 +725,11 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                       child: Text(
                         isExpired ? 'Expired' : 'Active',
                         style: TextStyle(
-                          color: isExpired ? Colors.redAccent : const Color(0xFFB9FF2B),
-                          fontSize: 11, fontWeight: FontWeight.w700,
+                          color: isExpired
+                              ? Colors.redAccent
+                              : const Color(0xFFB9FF2B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -784,19 +745,24 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         child: LinearProgressIndicator(
                           value: progress,
                           backgroundColor: Colors.white10,
-                          valueColor: const AlwaysStoppedAnimation(Color(0xFFFF5E00)),
+                          valueColor: const AlwaysStoppedAnimation(
+                              Color(0xFFFF5E00)),
                           minHeight: 6,
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Text('${(progress * 100).round()}%',
-                        style: const TextStyle(color: Color(0xFFFF5E00), fontSize: 12, fontWeight: FontWeight.w700)),
+                        style: const TextStyle(
+                            color: Color(0xFFFF5E00),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
                   ]),
                   const SizedBox(height: 12),
                   // Stats row
                   Row(children: [
-                    _miniStat(Icons.calendar_today_outlined, '${days ?? '?'} days/wk'),
+                    _miniStat(Icons.calendar_today_outlined,
+                        '${days ?? '?'} days/wk'),
                     const SizedBox(width: 16),
                     _miniStat(Icons.timer_outlined, duration),
                     const SizedBox(width: 16),
@@ -805,7 +771,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                     if (expiryLabel.isNotEmpty)
                       Text(expiryLabel,
                           style: TextStyle(
-                            color: isExpired ? Colors.redAccent : Colors.white38,
+                            color: isExpired
+                                ? Colors.redAccent
+                                : Colors.white38,
                             fontSize: 11,
                           )),
                   ]),
