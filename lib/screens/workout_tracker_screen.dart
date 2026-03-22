@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/quickpose_service.dart';
 import '../services/audio_feedback_service.dart';
+import '../widgets/exercise_preview_dialog.dart';
 
 // This screen no longer embeds a native camera view.
 // Instead it launches a full-screen native Android Activity (QuickPoseActivity)
@@ -110,6 +111,13 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
   Future<void> _startWorkout() async {
     if (!_hasPermission) return;
+
+    // Show exercise preview video before launching camera.
+    // _startWorkout waits here until the dialog is dismissed —
+    // either by video ending or user tapping X.
+    await showExercisePreview(context, _selectedExercise);
+    if (!mounted) return;
+
     setState(() {
       _isRunning = true;
       _repCount = 0;
@@ -153,6 +161,43 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     ),
                   ),
                   const Spacer(),
+                  
+                  // How To — rewatch exercise video at any time
+                  GestureDetector(
+                    onTap: () =>
+                        showExercisePreview(context, _selectedExercise),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.play_circle_outline,
+                            color: Colors.white54,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'How to',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
                   // Audio toggle button
                   GestureDetector(
                     onTap: () {
