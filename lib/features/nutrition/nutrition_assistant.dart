@@ -14,30 +14,30 @@ class NutritionAssistantScreen extends StatefulWidget {
       _NutritionAssistantScreenState();
 }
 
-class _NutritionAssistantScreenState
-    extends State<NutritionAssistantScreen> {
+class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   final _ragService       = RagService();
   final _sessionService   = WorkoutSessionService();
   final _controller       = TextEditingController();
   final _scrollController = ScrollController();
-  
+
   // Lifted here to preserve horizontal scroll position across Expanded rebuilds
   final _stripScrollController = ScrollController();
+  final GlobalKey _stripKey = GlobalKey();
 
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
   WorkoutSession? _expandedSession;
-  // Lifted here so it survives the Expanded wrapper toggling around
-  // _SessionHistoryStrip — keeping it in the strip's State caused it to
-  // reset whenever the widget tree changed (e.g. Expanded added/removed).
   String? _selectedDay;
 
+  // ── Send message ─────────────────────────────────────────────────────────
+  // overrideText = what gets sent to Gemini (full context)
+  // displayText  = what appears in the chat bubble (short, user-friendly)
   Future<void> _sendMessage({String? overrideText, String? displayText}) async {
     final question = overrideText ?? _controller.text.trim();
     if (question.isEmpty || _isLoading) return;
 
-    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final userId   = FirebaseAuth.instance.currentUser?.uid ?? '';
     final chatText = displayText ?? question;
 
     setState(() {
@@ -121,6 +121,35 @@ class _NutritionAssistantScreenState
     super.dispose();
   }
 
+  Widget _buildStrip() {
+    return _SessionHistoryStrip(
+      key: _stripKey,
+      sessionService:        _sessionService,
+      expandedSession:       _expandedSession,
+      selectedDay:           _selectedDay,
+      stripScrollController: _stripScrollController,
+      onDaySelected:         (day) => setState(() => _selectedDay = day),
+      onSessionTap: (session) {
+        setState(() {
+          _expandedSession =
+              _expandedSession?.id == session.id ? null : session;
+        });
+      },
+      onAskFollowUp: (session, setNumber) {
+        setState(() => _expandedSession = null);
+        _sendMessage(
+          overrideText:
+              'Based on my ${session.exerciseDisplayName} session where I did '
+              '${session.reps} reps, ${session.debriefText} '
+              'What should I focus on to improve next time?',
+          displayText:
+              'How can I improve my ${session.exerciseDisplayName} — '
+              'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -145,107 +174,54 @@ class _NutritionAssistantScreenState
       ),
       body: Column(
         children: [
-
-          // ── Session History Strip — takes all space when debrief open ───
+          // Strip takes all space when debrief is open, natural height otherwise
           if (_expandedSession != null)
-            Expanded(
-              child: _SessionHistoryStrip(
-                sessionService:        _sessionService,
-                expandedSession:       _expandedSession,
-                selectedDay:           _selectedDay,
-                stripScrollController: _stripScrollController,
-                onDaySelected:         (day) => setState(() => _selectedDay = day),
-                onSessionTap: (session) {
-                  setState(() {
-                    _expandedSession =
-                        _expandedSession?.id == session.id ? null : session;
-                  });
-                },
-                onAskFollowUp: (session, setNumber) {
-                  setState(() => _expandedSession = null);
-                  _sendMessage(
-                    overrideText:
-                        'Based on my ${session.exerciseDisplayName} session where I did '
-                        '${session.reps} reps, ${session.debriefText} '
-                        'What should I focus on to improve next time?',
-                    displayText:
-                        'How can I improve my ${session.exerciseDisplayName} — '
-                        'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
-                  );
-                },
-              ),
-            )
+            Expanded(child: _buildStrip())
           else
-          _SessionHistoryStrip(
-            sessionService:        _sessionService,
-            expandedSession:       _expandedSession,
-            selectedDay:           _selectedDay,
-            stripScrollController: _stripScrollController,
-            onDaySelected:         (day) => setState(() => _selectedDay = day),
-            onSessionTap: (session) {
-              setState(() {
-                _expandedSession =
-                    _expandedSession?.id == session.id ? null : session;
-              });
-            },
-            onAskFollowUp: (session, setNumber) {
-              setState(() => _expandedSession = null);
-              _sendMessage(
-                overrideText:
-                    'Based on my ${session.exerciseDisplayName} session where I did '
-                    '${session.reps} reps, ${session.debriefText} '
-                    'What should I focus on to improve next time?',
-                displayText:
-                    'How can I improve my ${session.exerciseDisplayName} — '
-                    'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
-              );
-            },
-          ),
+            _buildStrip(),
 
-          // ── Chat Messages — hidden when debrief panel is open ────────────
-          // When a session is expanded the debrief panel takes all available
-          // space. The chat area is collapsed to zero so there is no overflow.
+          // Chat hidden when debrief panel is open
           if (_expandedSession == null)
-          Expanded(
-            child: _messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Ask me anything about fitness,\nnutrition, or recovery.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Tap a session above to ask about your form',
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.25),
-                              fontSize: 13),
-                        ),
-                      ],
+            Expanded(
+              child: _messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Ask me anything about fitness,\nnutrition, or recovery.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Tap a session above to ask about your form',
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.25),
+                                fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length + (_isLoading ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _messages.length && _isLoading) {
+                          return const _TypingIndicator();
+                        }
+                        final msg = _messages[index];
+                        return _ChatBubble(
+                          text:        msg['text']       as String,
+                          isUser:      msg['role']       == 'user',
+                          isStreaming: msg['isStreaming'] as bool,
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length + (_isLoading ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _messages.length && _isLoading) {
-                        return const _TypingIndicator();
-                      }
-                      final msg = _messages[index];
-                      return _ChatBubble(
-                        text:        msg['text']       as String,
-                        isUser:      msg['role']       == 'user',
-                        isStreaming: msg['isStreaming'] as bool,
-                      );
-                    },
-                  ),
-          ),
+            ),
 
-          // ── Input Bar ────────────────────────────────────────────────────
+          // Input bar always visible
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -300,6 +276,7 @@ class _SessionHistoryStrip extends StatefulWidget {
   final void Function(WorkoutSession session, int setNumber) onAskFollowUp;
 
   const _SessionHistoryStrip({
+    super.key,
     required this.sessionService,
     required this.expandedSession,
     required this.selectedDay,
@@ -316,8 +293,6 @@ class _SessionHistoryStrip extends StatefulWidget {
 class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
-  // _selectedDay and stripScrollController are now owned by the parent screen 
-  // so they survive widget tree restructuring (Expanded wrapping/unwrapping)
 
   @override
   void initState() {
@@ -468,7 +443,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
             // ── Strip ────────────────────────────────────────────────────
             SizedBox(
-              height: 88,
+              height: 100, // Increased height to prevent layout overflows
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 child: widget.selectedDay == null
@@ -640,130 +615,128 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
             ),
 
             // ── Expanded debrief panel — fills all remaining space ───────
-            // Wrapped in Expanded so it stretches from below the strip all
-            // the way to the input bar without overflowing.
             if (widget.expandedSession != null)
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: const Color(0xFFFF5E00).withOpacity(0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    // Header row — identical to original
-                    Row(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.record_voice_over,
-                            color: Color(0xFFFF5E00), size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
+
+                        // Header row
+                        Row(
+                          children: [
+                            const Icon(Icons.record_voice_over,
+                                color: Color(0xFFFF5E00), size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${widget.expandedSession!.exerciseDisplayName} Debrief',
+                                style: const TextStyle(
+                                  color: Color(0xFFFF5E00),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            // TTS play/stop button
+                            GestureDetector(
+                              onTap: () => _toggleSpeaking(
+                                  widget.expandedSession!.debriefText),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _isSpeaking
+                                      ? const Color(0xFFFF5E00)
+                                      : const Color(0xFFFF5E00).withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFFFF5E00).withOpacity(0.6),
+                                  ),
+                                ),
+                                child: Icon(
+                                  _isSpeaking
+                                      ? Icons.stop_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: _isSpeaking
+                                      ? Colors.white
+                                      : const Color(0xFFFF5E00),
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Debrief text
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Text(
-                            '${widget.expandedSession!.exerciseDisplayName} Debrief',
+                            widget.expandedSession!.debriefText,
                             style: const TextStyle(
-                              color: Color(0xFFFF5E00),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.7,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                         ),
-                        // TTS play/stop button
+
+                        const SizedBox(height: 12),
+
+                        // Ask follow-up button
                         GestureDetector(
-                          onTap: () => _toggleSpeaking(
-                              widget.expandedSession!.debriefText),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(8),
+                          onTap: () {
+                            final setNum = _setNumberFor(widget.expandedSession!, daySessions);
+                            widget.onAskFollowUp(widget.expandedSession!, setNum);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: _isSpeaking
-                                  ? const Color(0xFFFF5E00)
-                                  : const Color(0xFFFF5E00).withOpacity(0.15),
-                              shape: BoxShape.circle,
+                              color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: const Color(0xFFFF5E00).withOpacity(0.6),
-                              ),
+                                  color: const Color(0xFFB9FF2B).withOpacity(0.4)),
                             ),
-                            child: Icon(
-                              _isSpeaking
-                                  ? Icons.stop_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: _isSpeaking
-                                  ? Colors.white
-                                  : const Color(0xFFFF5E00),
-                              size: 20,
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.chat_bubble_outline,
+                                    color: Color(0xFFB9FF2B), size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Ask the coach about this session',
+                                  style: TextStyle(
+                                    color: Color(0xFFB9FF2B),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 10),
-
-                    // Debrief text — no height constraint, scrollable via parent
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        widget.expandedSession!.debriefText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          height: 1.7,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Ask follow-up button
-                    GestureDetector(
-                      onTap: () {
-                        final setNum = _setNumberFor(widget.expandedSession!, daySessions);
-                        widget.onAskFollowUp(widget.expandedSession!, setNum);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFB9FF2B).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFFB9FF2B).withOpacity(0.4)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.chat_bubble_outline,
-                                color: Color(0xFFB9FF2B), size: 14),
-                            SizedBox(width: 6),
-                            Text(
-                              'Ask the coach about this session',
-                              style: TextStyle(
-                                color: Color(0xFFB9FF2B),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
                 ),
               ),
 
