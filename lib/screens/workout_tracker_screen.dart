@@ -31,33 +31,34 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
   final QuickPoseService      _quickPoseService = QuickPoseService();
   final WorkoutSessionService _sessionService   = WorkoutSessionService();
-  final AudioFeedbackService _audioService = AudioFeedbackService();
+  final AudioFeedbackService  _audioService     = AudioFeedbackService();
 
-  bool _hasPermission = false;
-  bool _isRunning = false;
-  int _repCount = 0;
-  String _feedback = '';
-  String _status = 'idle';
+  bool   _hasPermission    = false;
+  bool   _isRunning        = false;
+  int    _repCount         = 0;
+  String _feedback         = '';
+  String _status           = 'idle';
   String _selectedExercise = 'squat';
 
-  // Tracks sessions saved in this screen visit for the snackbar notification
+  // Spinner shown while session is saving to Firestore
   bool _savingSession = false;
+
+  // Timer mode for exercises like plank
   bool _isTimerMode = false;
 
-  // Exercises that use timer instead of rep counter
+  // Exercises that use a timer instead of a rep counter
   static const _timerExercises = {'plank'};
-
   bool _isTimerExercise(String exercise) => _timerExercises.contains(exercise);
 
   final Map<String, String> _exercises = {
-    'Squat': 'squat',
-    'Push Up': 'pushup',
-    'Bicep Curl': 'bicep_curl',
+    'Squat':        'squat',
+    'Push Up':      'pushup',
+    'Bicep Curl':   'bicep_curl',
     'Jumping Jack': 'jumping_jack',
-    'Left Lunge': 'lunge_left',
-    'Right Lunge': 'lunge_right',
-    'Sit Up': 'sit_up',
-    'Plank': 'plank',
+    'Left Lunge':   'lunge_left',
+    'Right Lunge':  'lunge_right',
+    'Sit Up':       'sit_up',
+    'Plank':        'plank',
     'Glute Bridge': 'glute_bridge',
   };
 
@@ -106,10 +107,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     _quickPoseService.resultsStream.listen((data) {
       if (!mounted) return;
 
-      final newRepCount = (data['repCount'] as int?) ?? _repCount;
+      final newRepCount = (data['repCount'] as int?)    ?? _repCount;
       final newFeedback = (data['feedback'] as String?) ?? '';
-      final newStatus = (data['status'] as String?) ?? 'loading';
-      final newIsTimer = (data['isTimer'] as bool?) ?? false;
+      final newStatus   = (data['status']   as String?) ?? 'loading';
+      final newIsTimer  = (data['isTimer']  as bool?)   ?? false;
 
       // Trigger audio for rep count if it changed
       if (newRepCount != _repCount) {
@@ -122,9 +123,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       }
 
       setState(() {
-        _repCount = newRepCount;
-        _feedback = newFeedback;
-        _status = newStatus;
+        _repCount    = newRepCount;
+        _feedback    = newFeedback;
+        _status      = newStatus;
         _isTimerMode = newIsTimer;
       });
     }, onError: (e) => debugPrint('QuickPose error: $e'));
@@ -136,9 +137,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       (data) async {
         if (!mounted) return;
 
-        final exercise   = data['exercise']   as String;
-        final reps       = data['reps']       as int;
-        final durationMs = data['durationMs'] as int;
+        final exercise    = data['exercise']   as String;
+        final reps        = data['reps']       as int;
+        final durationMs  = data['durationMs'] as int;
         final feedbackMap = Map<String, int>.from(data['feedbackMap'] as Map);
 
         setState(() => _savingSession = true);
@@ -159,7 +160,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Color(0xFFB9FF2B), size: 18),
+                  const Icon(Icons.check_circle,
+                      color: Color(0xFFB9FF2B), size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -171,7 +173,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
               ),
               backgroundColor: const Color(0xFF1A1A1A),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -185,16 +188,16 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     if (!_hasPermission) return;
 
     // Show exercise preview video before launching camera.
-    // _startWorkout waits here until the dialog is dismissed —
-    // either by video ending or user tapping X.
+    // Waits until the dialog is dismissed — either by video ending or user tapping X.
     await showExercisePreview(context, _selectedExercise);
     if (!mounted) return;
 
     setState(() {
-      _isRunning = true;
-      _repCount = 0;
-      _feedback = '';
-      _status = 'loading';
+      _isRunning   = true;
+      _repCount    = 0;
+      _feedback    = '';
+      _status      = 'loading';
+      _isTimerMode = _isTimerExercise(_selectedExercise);
     });
     await _quickPoseService.startCamera(_selectedExercise);
   }
@@ -202,10 +205,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   Future<void> _switchExercise(String exerciseKey) async {
     setState(() {
       _selectedExercise = exerciseKey;
-      _repCount = 0;
-      _feedback = '';
-      _status = 'loading';
-      _isTimerMode = _isTimerExercise(exerciseKey);
+      _repCount         = 0;
+      _feedback         = '';
+      _status           = 'loading';
+      _isTimerMode      = _isTimerExercise(exerciseKey);
     });
     if (_isRunning) {
       await _quickPoseService.switchExercise(exerciseKey);
@@ -220,6 +223,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+
             // ── Header ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -234,19 +238,18 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     ),
                   ),
                   const Spacer(),
+
+                  // Saving spinner — visible while session writes to Firestore
                   if (_savingSession)
-                    const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Color(0xFFB9FF2B)),
-                    )
-                  else if (_status == 'success')
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.5)),
+                    const Padding(
+                      padding: EdgeInsets.only(right: 10),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Color(0xFFB9FF2B)),
+                      ),
+                    ),
 
                   // How To — rewatch exercise video at any time
                   GestureDetector(
@@ -254,9 +257,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                         showExercisePreview(context, _selectedExercise),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(8),
@@ -264,11 +265,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       ),
                       child: const Row(
                         children: [
-                          Icon(
-                            Icons.play_circle_outline,
-                            color: Colors.white54,
-                            size: 16,
-                          ),
+                          Icon(Icons.play_circle_outline,
+                              color: Colors.white54, size: 16),
                           SizedBox(width: 6),
                           Text(
                             'How to',
@@ -293,9 +291,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: _audioService.isEnabled
                             ? const Color(0xFFB9FF2B).withOpacity(0.15)
@@ -334,18 +330,17 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     ),
                   ),
                   const SizedBox(width: 10),
+
+                  // LIVE badge — shown when pose tracking is active
                   if (_status == 'success')
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: const Color(0xFFB9FF2B).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: const Color(0xFFB9FF2B).withOpacity(0.5),
-                        ),
+                            color: const Color(0xFFB9FF2B).withOpacity(0.5)),
                       ),
                       child: const Text(
                         'LIVE',
@@ -363,14 +358,14 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
             const SizedBox(height: 32),
 
-            // Rep Counter
+            // ── Rep / Timer Counter ───────────────────────────────────────
             Center(
               child: Column(
                 children: [
                   Text(
                     _isTimerMode
                         ? _formatTime(_repCount) // Shows MM:SS for timer
-                        : '$_repCount', // Shows number for reps
+                        : '$_repCount',          // Shows number for reps
                     style: const TextStyle(
                       color: Color(0xFFB9FF2B),
                       fontSize: 100,
@@ -380,7 +375,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                   ),
                   Text(
                     _isTimerMode ? 'elapsed' : 'reps',
-                    style: const TextStyle(color: Colors.white38, fontSize: 18),
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 18),
                   ),
                 ],
               ),
@@ -388,33 +384,33 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
             const SizedBox(height: 24),
 
-            // Feedback Banner
+            // ── Feedback Banner ───────────────────────────────────────────
             if (_feedback.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                      horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF5E00).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: const Color(0xFFFF5E00).withOpacity(0.5),
-                    ),
+                        color: const Color(0xFFFF5E00).withOpacity(0.5)),
                   ),
                   child: Text(
                     _feedback,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
 
             const Spacer(),
 
-            // Exercise Selector
+            // ── Exercise Selector ─────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.only(left: 20, bottom: 12),
               child: Text(
@@ -440,21 +436,25 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
+                          horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
+                        color: isSelected
+                            ? const Color(0xFFB9FF2B)
+                            : const Color(0xFF1A1A1A),
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
-                          color: isSelected ? const Color(0xFFB9FF2B) : Colors.white12,
+                          color: isSelected
+                              ? const Color(0xFFB9FF2B)
+                              : Colors.white12,
                         ),
                       ),
                       child: Text(
                         entry.key,
                         style: TextStyle(
                           color: isSelected ? Colors.black : Colors.white70,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w400,
                           fontSize: 13,
                         ),
                       ),
@@ -466,7 +466,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
             const SizedBox(height: 20),
 
-            // Start Button
+            // ── Start Button ──────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
               child: SizedBox(
@@ -479,8 +479,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     backgroundColor: const Color(0xFFFF5E00),
                     disabledBackgroundColor: Colors.white12,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+                        borderRadius: BorderRadius.circular(14)),
                     elevation: 0,
                   ),
                   child: _isRunning
@@ -496,11 +495,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                            const Icon(Icons.camera_alt,
+                                color: Colors.white, size: 20),
                             const SizedBox(width: 10),
                             Text(
                               _hasPermission
