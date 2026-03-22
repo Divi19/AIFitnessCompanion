@@ -46,6 +46,13 @@ class QuickPoseActivity : ComponentActivity() {
     private var lastBroadcastedRepCount = 0  // Stores last known count so missed frames don't reset to 0
     private var lastBroadcastedFeedback  = "" // Stores last known feedback for same reason
 
+    // Timer support for duration-based exercises like plank
+    private var timerJob: kotlinx.coroutines.Job? = null
+    private var elapsedSeconds = 0
+
+    // Exercises that use a timer instead of rep counter
+    private val timerExercises = setOf("plank")
+
     // Tracks whether the user is currently at proper depth
     // Used to drive the visual rep quality indicator
     private var isAtProperDepth = false
@@ -59,6 +66,7 @@ class QuickPoseActivity : ComponentActivity() {
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
     private lateinit var exerciseLabel: TextView
+    private lateinit var repContainer:  LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,19 +128,26 @@ class QuickPoseActivity : ComponentActivity() {
         ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; topMargin = 88 })
 
         // Rep counter
-        val repContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+        repContainer = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
         }
-        repCountText = TextView(this).apply {
+       repCountText = TextView(this).apply {
             text = "0"; textSize = 96f
             setTextColor(Color.rgb(185, 255, 43))
             typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
         }
         repContainer.addView(repCountText)
-        repContainer.addView(TextView(this).apply {
-            text = "reps"; textSize = 18f
-            setTextColor(Color.argb(150, 255, 255, 255)); gravity = Gravity.CENTER
-        })
+
+        // Label changes between "reps" and "seconds" depending on exercise type
+        val unitLabel = TextView(this).apply {
+            text = if (isTimerExercise(currentExercise)) "seconds" else "reps"
+            textSize = 18f
+            setTextColor(Color.argb(150, 255, 255, 255))
+            gravity = Gravity.CENTER
+            tag = "unit_label" // Tag so we can find and update it later
+        }
+        repContainer.addView(unitLabel)
+
         root.addView(repContainer, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
@@ -163,6 +178,7 @@ class QuickPoseActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        stopTimer()
         quickPose.stop()
         try {
             cameraView.stop() // NEW: Explicitly release the camera hardware
@@ -186,6 +202,8 @@ class QuickPoseActivity : ComponentActivity() {
         if (newExercise != currentExercise) {
             currentExercise = newExercise
             counter.reset()
+            stopTimer()
+            elapsedSeconds = 0
             lastBroadcastedRepCount = 0
             lastBroadcastedFeedback = ""
             isAtProperDepth         = false
@@ -225,38 +243,56 @@ class QuickPoseActivity : ComponentActivity() {
         else           -> name
     }
 
-private fun startQuickPose(exerciseName: String) {
-        lifecycleScope.launch {
-            cameraView.start(useFrontCamera = true)
+    private fun isTimerExercise(name: String): Boolean {
+        return name in timerExercises
+    }
 
+private fun startQuickPose(exerciseName: String) {
+    lifecycleScope.launch {
+        cameraView.start(useFrontCamera = true)
+
+        if (isTimerExercise(exerciseName)) {
+            // Timer-based exercise — start the timer immediately
+            // QuickPose still runs for form feedback but we ignore rep values
+            startTimer()
+
+            quickPose.start(
+                arrayOf(featureFor(exerciseName)),
+                onFrame = { _, _, _, feedback, _ ->
+                    // For timer exercises we only care about feedback
+                    // Rep counting is handled by the timer coroutine above
+                    val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
+                    if (feedbackMsg != lastBroadcastedFeedback) {
+                        lastBroadcastedFeedback = feedbackMsg
+                        runOnUiThread {
+                            if (feedbackMsg.isNotEmpty()) {
+                                feedbackText.text       = feedbackMsg
+                                feedbackText.visibility = View.VISIBLE
+                            } else {
+                                feedbackText.visibility = View.GONE
+                            }
+                        }
+                    }
+                }
+            )
+        } else {
+            // Rep-based exercise — original counting logic
             quickPose.start(
                 arrayOf(featureFor(exerciseName)),
                 onFrame = { status, _, features, feedback, _ ->
 
                     val statusStr = if (status is Status.Success) "success" else "loading"
 
-                    // ── FORM CHECK ────────────────────────────────────────────
-                    // QuickPose sets isRequired = true on feedback items that
-                    // represent a critical form error the user must fix.
-                    // We block rep counting entirely while any required feedback
-                    // is active — bad form reps simply don't count.
                     val hasRequiredFormIssue = feedback?.values?.any {
                         it.isRequired == true
                     } ?: false
 
-                    // ── FEATURE PROCESSING ────────────────────────────────────
                     if (features != null && features.isNotEmpty()) {
                         features.forEach { (feature, result) ->
                             if (feature is Feature.Fitness && result.value != null) {
-
-                                // Depth indicator — true when signal is in bottom range.
-                                // We check this regardless of form so the indicator still
-                                // shows the user they reached depth, even if form blocked
-                                // the count — helpful for learning correct positioning.
                                 isAtProperDepth = result.value <= DEPTH_THRESHOLD
 
                                 if (!hasRequiredFormIssue) {
-                                    // Form is clean — allow rep counting
                                     val newCount = counter.count(result.value).count
                                     if (newCount != lastBroadcastedRepCount) {
                                         lastBroadcastedRepCount = newCount
@@ -268,7 +304,6 @@ private fun startQuickPose(exerciseName: String) {
                                             )
                                         }
                                     } else {
-                                        // Count unchanged — just update visual style
                                         runOnUiThread {
                                             updateRepCounterStyle(
                                                 isAtDepth   = isAtProperDepth,
@@ -277,9 +312,6 @@ private fun startQuickPose(exerciseName: String) {
                                         }
                                     }
                                 } else {
-                                    // Form issue active — counter is frozen.
-                                    // Turn counter orange so user knows a form
-                                    // correction is blocking the count.
                                     runOnUiThread {
                                         updateRepCounterStyle(
                                             isAtDepth   = false,
@@ -290,22 +322,17 @@ private fun startQuickPose(exerciseName: String) {
                             }
                         }
                     }
-                    // If features is null (body lost), keep showing last known
-                    // count — do not reset to 0.
 
-                    // ── FEEDBACK PROCESSING ───────────────────────────────────
                     val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
                     if (feedbackMsg != lastBroadcastedFeedback) {
                         lastBroadcastedFeedback = feedbackMsg
                         runOnUiThread {
                             if (feedbackMsg.isNotEmpty()) {
-                                // Required feedback = red banner (critical error)
-                                // Advisory feedback = orange banner (suggestion)
                                 feedbackText.setBackgroundColor(
                                     if (hasRequiredFormIssue)
-                                        Color.argb(200, 220, 50, 50)   // Red
+                                        Color.argb(200, 220, 50, 50)
                                     else
-                                        Color.argb(200, 255, 94, 0)    // Orange
+                                        Color.argb(200, 255, 94, 0)
                                 )
                                 feedbackText.text       = feedbackMsg
                                 feedbackText.visibility = View.VISIBLE
@@ -315,19 +342,20 @@ private fun startQuickPose(exerciseName: String) {
                         }
                     }
 
-                    // ── BROADCAST TO FLUTTER ──────────────────────────────────
                     sendBroadcast(Intent(ACTION_RESULT).apply {
                         putExtra(EXTRA_REP_COUNT,   lastBroadcastedRepCount)
                         putExtra(EXTRA_FEEDBACK,    lastBroadcastedFeedback)
                         putExtra(EXTRA_STATUS,      statusStr)
                         putExtra("isAtProperDepth", isAtProperDepth)
                         putExtra("formIssueActive", hasRequiredFormIssue)
+                        putExtra("isTimer",         false)
                         setPackage(packageName)
                     })
                 }
             )
         }
     }
+}
 
 
 /// Updates the rep counter text color based on current exercise state.
@@ -343,5 +371,60 @@ private fun updateRepCounterStyle(isAtDepth: Boolean, formBlocked: Boolean) {
             else        -> Color.rgb(255, 255, 255) // White — neutral position
         }
     )
+}
+
+/// Starts the elapsed seconds timer for duration-based exercises.
+/// Includes a 10-second setup delay before counting begins so the
+/// user has time to get into position.
+private fun startTimer() {
+    stopTimer() // Cancel any existing timer first
+    elapsedSeconds = 0
+
+    timerJob = lifecycleScope.launch {
+        // 10-second setup countdown — tell user to get ready
+        for (i in 10 downTo 1) {
+            runOnUiThread {
+                repCountText.text = i.toString()
+                repCountText.setTextColor(Color.rgb(255, 255, 255)) // White during countdown
+                // Update unit label to show "get ready"
+                val unitLabel = repContainer.findViewWithTag<TextView>("unit_label")
+                unitLabel?.text = "get ready..."
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+
+        // Setup done — start counting elapsed seconds
+        runOnUiThread {
+            val unitLabel = repContainer.findViewWithTag<TextView>("unit_label")
+            unitLabel?.text = "seconds"
+        }
+
+        while (true) {
+            runOnUiThread {
+                repCountText.text = elapsedSeconds.toString()
+                repCountText.setTextColor(Color.rgb(185, 255, 43)) // Lime green when active
+            }
+
+            // Broadcast timer value to Flutter
+            sendBroadcast(Intent(ACTION_RESULT).apply {
+                putExtra(EXTRA_REP_COUNT,   elapsedSeconds)
+                putExtra(EXTRA_FEEDBACK,    lastBroadcastedFeedback)
+                putExtra(EXTRA_STATUS,      "success")
+                putExtra("isAtProperDepth", true)
+                putExtra("formIssueActive", false)
+                putExtra("isTimer",         true) // Flutter uses this to show timer UI
+                setPackage(packageName)
+            })
+
+            kotlinx.coroutines.delay(1000)
+            elapsedSeconds++
+        }
+    }
+}
+
+/// Cancels the running timer.
+private fun stopTimer() {
+    timerJob?.cancel()
+    timerJob = null
 }
 }

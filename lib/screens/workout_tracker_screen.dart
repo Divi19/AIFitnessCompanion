@@ -37,6 +37,13 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   String _status = 'idle';
   String _selectedExercise = 'squat';
 
+  bool _isTimerMode = false;
+
+  // Exercises that use timer instead of rep counter
+  static const _timerExercises = {'plank'};
+
+  bool _isTimerExercise(String exercise) => _timerExercises.contains(exercise);
+
   final Map<String, String> _exercises = {
     'Squat': 'squat',
     'Push Up': 'pushup',
@@ -83,6 +90,15 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     }
   }
 
+  /// Formats elapsed seconds into MM:SS display format.
+  /// Example: 75 seconds → "01:15"
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
   void _listenToResults() {
     _quickPoseService.resultsStream.listen((data) {
       if (!mounted) return;
@@ -90,6 +106,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       final newRepCount = (data['repCount'] as int?) ?? _repCount;
       final newFeedback = (data['feedback'] as String?) ?? '';
       final newStatus = (data['status'] as String?) ?? 'loading';
+      final newIsTimer = (data['isTimer'] as bool?) ?? false;
 
       // Trigger audio for rep count if it changed
       if (newRepCount != _repCount) {
@@ -105,6 +122,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
         _repCount = newRepCount;
         _feedback = newFeedback;
         _status = newStatus;
+        _isTimerMode = newIsTimer;
       });
     }, onError: (e) => debugPrint('QuickPose error: $e'));
   }
@@ -133,6 +151,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       _repCount = 0;
       _feedback = '';
       _status = 'loading';
+      _isTimerMode = _isTimerExercise(exerciseKey);
     });
     if (_isRunning) {
       await _quickPoseService.switchExercise(exerciseKey);
@@ -161,7 +180,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     ),
                   ),
                   const Spacer(),
-                  
+
                   // How To — rewatch exercise video at any time
                   GestureDetector(
                     onTap: () =>
@@ -282,7 +301,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
               child: Column(
                 children: [
                   Text(
-                    '$_repCount',
+                    _isTimerMode
+                        ? _formatTime(_repCount) // Shows MM:SS for timer
+                        : '$_repCount', // Shows number for reps
                     style: const TextStyle(
                       color: Color(0xFFB9FF2B),
                       fontSize: 100,
@@ -290,9 +311,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       height: 1,
                     ),
                   ),
-                  const Text(
-                    'reps',
-                    style: TextStyle(color: Colors.white38, fontSize: 18),
+                  Text(
+                    _isTimerMode ? 'elapsed' : 'reps',
+                    style: const TextStyle(color: Colors.white38, fontSize: 18),
                   ),
                 ],
               ),
