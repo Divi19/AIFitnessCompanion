@@ -41,6 +41,9 @@ dependencies:
 
   # For audio
   flutter_tts: ^4.0.2
+
+  youtube_player_flutter: ^9.1.1
+  
   # PDF reading
   syncfusion_flutter_pdf: ^32.2.7
 
