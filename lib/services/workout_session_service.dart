@@ -28,7 +28,6 @@ class WorkoutSession {
   // ── Form quality score ───────────────────────────────────────────────────
   // score = reps / (reps + totalFeedback) * 100, clamped 10–100.
   // Perfect form (0 feedback) = 100. Equal feedback to reps = 50.
-  // Minimum 10 so the chart never shows a dead flat zero line.
   double get formScore {
     if (reps == 0) return 10.0;
     final totalFeedback = feedbackMap.values.fold(0, (a, b) => a + b);
@@ -36,7 +35,6 @@ class WorkoutSession {
     return raw.clamp(10.0, 100.0);
   }
 
-  // Human-readable "2 hours ago", "Yesterday", "3 days ago" etc.
   String get timeAgo {
     final diff = DateTime.now().difference(timestamp);
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
@@ -90,18 +88,28 @@ class WorkoutSession {
   }
 }
 
-// ── Weekly trend data point ───────────────────────────────────────────────
-// One entry per calendar day that had at least one session.
-// avgScore is the average formScore across all sessions that day.
-class FormTrendPoint {
-  final DateTime date;
-  final double avgScore;   // 0–100
-  final String dayLabel;   // "Mon", "Tue" … "Today", "Yest"
+// ── Set trend data point ─────────────────────────────────────────────────
+// One point per set (session) of a specific exercise, ordered oldest→newest.
+// setNumber restarts at 1 for each new calendar day — so if the user did
+// squats on Monday and Wednesday, Monday has Set 1, Set 2 and Wednesday
+// has its own Set 1, Set 2.
+// sessionIndex tells the chart which "day group" this point belongs to,
+// used to colour-code sets from different days differently.
+class SetTrendPoint {
+  final String sessionId;
+  final double score;       // formScore 0–100
+  final int setNumber;      // 1-based within the day
+  final int sessionIndex;   // 0-based day group index (for colour banding)
+  final String xLabel;      // e.g. "S1", "S2", "S1*" (new session marker)
+  final DateTime timestamp;
 
-  const FormTrendPoint({
-    required this.date,
-    required this.avgScore,
-    required this.dayLabel,
+  const SetTrendPoint({
+    required this.sessionId,
+    required this.score,
+    required this.setNumber,
+    required this.sessionIndex,
+    required this.xLabel,
+    required this.timestamp,
   });
 }
 
@@ -182,64 +190,89 @@ class WorkoutSessionService {
         .map((snap) => snap.docs.map(WorkoutSession.fromFirestore).toList());
   }
 
-  // ── Weekly form trend ────────────────────────────────────────────────────
-  // Returns up to 7 FormTrendPoints for the last 7 calendar days.
-  // Each point = average formScore across all sessions on that day.
-  // Points are sorted oldest→newest so the chart line goes left to right.
-  Future<List<FormTrendPoint>> getWeeklyTrend() async {
+  // ── Distinct exercises that have at least one session ────────────────────
+  // Used to populate the exercise picker in the trend chart flow.
+  // Returns exercise keys (e.g. 'squat', 'pushup') in the order they were
+  // most recently performed, deduped.
+  Future<List<String>> getExercisesWithSessions() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
-
-    final now   = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day)
-        .subtract(const Duration(days: 6));
 
     final snapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workout_sessions')
-        .where('timestamp',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .orderBy('timestamp', descending: true)
+        .limit(50)
+        .get();
+
+    final seen  = <String>{};
+    final order = <String>[];
+    for (final doc in snapshot.docs) {
+      final ex = (doc.data()['exercise'] as String?) ?? '';
+      if (ex.isNotEmpty && seen.add(ex)) order.add(ex);
+    }
+    return order;
+  }
+
+  // ── Per-set trend for a specific exercise ────────────────────────────────
+  // Returns one SetTrendPoint per session of [exercise], ordered
+  // oldest→newest (so the chart line goes left to right).
+  //
+  // Set numbering logic:
+  //   - Sessions are grouped by calendar day.
+  //   - Within each day the sets are numbered 1, 2, 3 …
+  //   - When a new day begins the set counter resets to 1.
+  //   - sessionIndex increments each time a new calendar day appears,
+  //     allowing the chart to colour-band different days.
+  Future<List<SetTrendPoint>> getSetTrendForExercise(String exercise) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return [];
+
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workout_sessions')
+        .where('exercise', isEqualTo: exercise)
         .orderBy('timestamp')
         .get();
 
     if (snapshot.docs.isEmpty) return [];
 
-    final sessions =
-        snapshot.docs.map(WorkoutSession.fromFirestore).toList();
+    final sessions = snapshot.docs.map(WorkoutSession.fromFirestore).toList();
 
-    // Group by calendar day
-    final Map<DateTime, List<WorkoutSession>> byDay = {};
+    final points   = <SetTrendPoint>[];
+    DateTime? lastDay;
+    int setNum       = 0;
+    int sessionIndex = -1;
+
     for (final s in sessions) {
-      final day =
-          DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
-      byDay.putIfAbsent(day, () => []).add(s);
+      final day = DateTime(
+          s.timestamp.year, s.timestamp.month, s.timestamp.day);
+
+      // New calendar day → reset set counter and bump session group index
+      if (lastDay == null || day != lastDay) {
+        lastDay      = day;
+        setNum       = 0;
+        sessionIndex++;
+      }
+      setNum++;
+
+      // xLabel: "S1", "S2" … If this is the first set of a new day group
+      // (other than the very first group), add a bullet to signal a new session
+      final isNewSession = setNum == 1 && sessionIndex > 0;
+      final xLabel       = isNewSession ? '●S$setNum' : 'S$setNum';
+
+      points.add(SetTrendPoint(
+        sessionId:    s.id,
+        score:        s.formScore,
+        setNumber:    setNum,
+        sessionIndex: sessionIndex,
+        xLabel:       xLabel,
+        timestamp:    s.timestamp,
+      ));
     }
 
-    final today    = DateTime(now.year, now.month, now.day);
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    final points = byDay.entries.map((entry) {
-      final day     = entry.key;
-      final daySess = entry.value;
-      final avgScore =
-          daySess.map((s) => s.formScore).reduce((a, b) => a + b) /
-              daySess.length;
-
-      final diff = today.difference(day).inDays;
-      final String label;
-      if (diff == 0) {
-        label = 'Today';
-      } else if (diff == 1) {
-        label = 'Yest';
-      } else {
-        label = weekdays[day.weekday - 1];
-      }
-
-      return FormTrendPoint(date: day, avgScore: avgScore, dayLabel: label);
-    }).toList();
-
-    points.sort((a, b) => a.date.compareTo(b.date));
     return points;
   }
 
@@ -320,7 +353,7 @@ Write a spoken coaching debrief of around 100-150 words. Rules:
       debugPrint('Debrief generation error: $e');
     }
 
-    return 'Great session! You completed $reps $exerciseDisplay reps in ${durationSec}s. Keep it up!';
+    return 'Great session! You completed $reps ${_displayName(exercise)} reps in ${durationSec}s. Keep it up!';
   }
 
   List<String> _extractLimitations(Map<String, dynamic>? biometrics) {
