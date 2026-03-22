@@ -6,23 +6,42 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///   - Meal photo classification (type = 'meal')
 ///   - Barcode scanned snack      (type = 'snack')
 ///
-/// Nutrition values are always stored for the FULL portion.
-/// The [portion] field (0.0 to 1.0) is applied when displaying
-/// or summing daily totals - e.g. portion 0.5 means half the
-/// listed calories/macros were consumed.
+/// IMPORTANT SCHEMA NOTE:
+/// Older documents in Firestore used snake_case keys (meal_id, user_id).
+/// Going forward, toMap() uses camelCase keys (mealId). 
+/// The fromMap() factory safely handles BOTH so old and new documents load correctly.
 class MealModel {
-  final String mealId; // Unique ID for this log entry
-  final String userId; // Links entry to the logged-in user
-  final String name; // e.g. "Nasi Lemak" or "Lasagna"
-  final String type; // 'meal' | 'snack'
-  final double calories; // kcal for full portion
-  final double protein; // grams for full portion
-  final double carbs; // grams for full portion
-  final double fat; // grams for full portion
-  final double portion; // 0.0–1.0 (1.0 = full, 0.5 = half, etc.)
-  final Timestamp timestamp; // When the entry was logged
+  /// Unique ID for this log entry
+  final String mealId; 
+  
+  /// Links entry to the logged-in user
+  final String userId; 
+  
+  /// e.g., "Nasi Lemak", "Lasagna", or "Snickers Bar"
+  final String name; 
+  
+  /// 'meal' (from photo/Gemini) or 'snack' (from barcode scanner)
+  final String type; 
+  
+  /// Total kcal consumed (already calculated for the gram weight/portion)
+  final double calories; 
+  
+  /// Total protein in grams consumed
+  final double protein; 
+  
+  /// Total carbs in grams consumed
+  final double carbs; 
+  
+  /// Total fat in grams consumed
+  final double fat; 
+  
+  /// The total grams consumed (for meals) or the portion multiplier (for barcode snacks)
+  final double portion; 
+  
+  /// When the entry was logged
+  final Timestamp timestamp;
 
-  MealModel({
+  const MealModel({
     required this.mealId,
     required this.userId,
     required this.name,
@@ -35,44 +54,53 @@ class MealModel {
     required this.timestamp,
   });
 
-  /// Calories actually consumed, after applying the portion multiplier.
-  double get consumedCalories => calories * portion;
+  // ── FROM FIRESTORE ────────────────────────────────────────────────────────
+  
+  /// Reconstructs a MealModel from a Firestore document snapshot.
+  /// Handles both snake_case (old documents) and camelCase (new documents).
+  /// Falls back gracefully on any missing or malformed fields to prevent crashes.
+  factory MealModel.fromMap(Map<String, dynamic> map) {
+    return MealModel(
+      // Safely checks for old meal_id or new mealId
+      mealId    : (map['meal_id']  ?? map['mealId']  ?? '') as String,
+      userId    : (map['user_id']  ?? map['userId']  ?? '') as String,
+      name      : (map['name']     ?? 'Unknown')            as String,
+      type      : (map['type']     ?? 'meal')               as String,
+      
+      // Use helper to safely parse ints, doubles, or strings from DB
+      calories  : _toDouble(map['calories']),
+      protein   : _toDouble(map['protein']),
+      carbs     : _toDouble(map['carbs']),
+      fat       : _toDouble(map['fat']),
+      portion   : _toDouble(map['portion']),
+      
+      // Ensure timestamp is actually a Timestamp, fallback to now if broken
+      timestamp : map['timestamp'] is Timestamp
+          ? map['timestamp'] as Timestamp
+          : Timestamp.now(),
+    );
+  }
 
-  /// Protein actually consumed, after applying the portion multiplier.
-  double get consumedProtein => protein * portion;
-
-  /// Carbs actually consumed, after applying the portion multiplier.
-  double get consumedCarbs => carbs * portion;
-
-  /// Fat actually consumed, after applying the portion multiplier.
-  double get consumedFat => fat * portion;
-
+  // ── TO FIRESTORE ──────────────────────────────────────────────────────────
+  
   /// Converts this model to a Map for storing in Firestore.
-  /// Field names follow the same snake_case convention as WorkoutModel.
+  /// New documents are written with camelCase keys going forward.
   Map<String, dynamic> toMap() => {
-    'meal_id': mealId,
-    'user_id': userId,
-    'name': name,
-    'type': type,
-    'calories': calories,
-    'protein': protein,
-    'carbs': carbs,
-    'fat': fat,
-    'portion': portion,
+    'mealId'   : mealId,
+    'userId'   : userId,
+    'name'     : name,
+    'type'     : type,
+    'calories' : calories,
+    'protein'  : protein,
+    'carbs'    : carbs,
+    'fat'      : fat,
+    'portion'  : portion,
     'timestamp': timestamp,
   };
 
-  /// Reconstructs a MealModel from a Firestore document snapshot.
-  factory MealModel.fromMap(Map<String, dynamic> map) => MealModel(
-    mealId: map['meal_id'] ?? '',
-    userId: map['user_id'] ?? '',
-    name: map['name'] ?? '',
-    type: map['type'] ?? 'meal',
-    calories: (map['calories'] ?? 0).toDouble(),
-    protein: (map['protein'] ?? 0).toDouble(),
-    carbs: (map['carbs'] ?? 0).toDouble(),
-    fat: (map['fat'] ?? 0).toDouble(),
-    portion: (map['portion'] ?? 1.0).toDouble(),
-    timestamp: map['timestamp'] ?? Timestamp.now(),
-  );
+  // ── HELPERS ───────────────────────────────────────────────────────────────
+
+  /// Safe conversion — handles String, int, double, and null without crashing
+  static double _toDouble(dynamic v) =>
+      v == null ? 0.0 : (v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0);
 }

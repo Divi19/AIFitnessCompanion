@@ -60,6 +60,7 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
   int    _daysPerWeek     = 3;
   String _workoutDuration = '45 mins';
   String _fitnessLevel    = 'Beginner';
+  bool   _hasWeights      = false;
   final List<String> _durations = ['20 mins', '30 mins', '45 mins', '60 mins', '90 mins'];
   final List<String> _levels    = ['Beginner', 'Intermediate', 'Advanced'];
 
@@ -176,18 +177,43 @@ User Profile:
 - Physical Limitations / Injuries: $limitationsText
 - Uses Wheelchair: $usesWheelchair
 - Uses Prosthesis: $usesProsthesis
+- Has Weights / Equipment: $_hasWeights (${_hasWeights ? 'Include dumbbell, barbell and resistance exercises' : 'Bodyweight exercises ONLY — no equipment required'})
 
 Strict Rules:
 - NEVER include exercises that stress injured areas
 - Adapt ALL movements for fitness level and limitations
 - Each session must fit within $_workoutDuration
-- Structure as Week 1, Week 2 etc. with Day labels
-- For each exercise: name, sets, reps/duration, rest time, and why it is safe
+- ${_hasWeights ? 'Include weighted exercises where appropriate' : 'Use ONLY bodyweight exercises — no equipment'}
+- Output ONLY a valid JSON array, no extra text before or after
+- Structure EXACTLY as shown:
+[
+  {
+    "week": 1,
+    "days": [
+      {
+        "day": 1,
+        "title": "Push Day",
+        "isRest": false,
+        "exercises": [
+          {"name": "Push-ups", "detail": "3 sets × 12 reps"},
+          {"name": "Plank", "detail": "3 sets × 30 sec"}
+        ]
+      },
+      {
+        "day": 2,
+        "title": "Rest Day",
+        "isRest": true,
+        "exercises": []
+      }
+    ]
+  }
+]
+- Each week must have exactly $_daysPerWeek workout days plus rest days to fill 7 days
+- Keep exercise names short (max 4 words), no asterisks or markdown
+- Keep detail concise: "3 sets × 12 reps" or "30 sec" format only
 - Add progressive overload each week
-- Include warm-up and cool-down for each day
-- Reference their $calories kcal daily target in nutrition section
-- End with monthly milestones, recovery tips and nutrition advice
 ''';
+
 
       final response = await http.post(
         Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AppConstants.geminiApiKey}'),
@@ -209,6 +235,7 @@ Strict Rules:
           'planWeeks':    _planWeeks,
           'duration':     _workoutDuration,
           'limitations':  limitationsText,
+          'hasWeights':   _hasWeights,
           'createdAt':    FieldValue.serverTimestamp(),
           'expiresAt':    Timestamp.fromDate(DateTime.now().add(Duration(days: _planWeeks * 7))),
         });
@@ -509,12 +536,69 @@ Strict Rules:
               ),
             ));
           }).toList()),
+          const SizedBox(height: 28),
+          _label('Do you have weights / equipment?'),
+          const SizedBox(height: 4),
+          const Text('Helps us tailor exercises to what you have available',
+              style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _hasWeights = false),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: !_hasWeights ? _orange : _surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: !_hasWeights ? _orange : Colors.white12),
+                  ),
+                  child: Column(children: [
+                    Icon(Icons.person_outline,
+                        color: !_hasWeights ? Colors.white : Colors.white38, size: 22),
+                    const SizedBox(height: 6),
+                    Text('No Equipment',
+                        style: TextStyle(color: !_hasWeights ? Colors.white : Colors.white54,
+                            fontWeight: !_hasWeights ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
+                    Text('Bodyweight only',
+                        style: TextStyle(color: !_hasWeights ? Colors.white70 : Colors.white24, fontSize: 10)),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _hasWeights = true),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: _hasWeights ? _orange : _surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _hasWeights ? _orange : Colors.white12),
+                  ),
+                  child: Column(children: [
+                    Icon(Icons.fitness_center,
+                        color: _hasWeights ? Colors.white : Colors.white38, size: 22),
+                    const SizedBox(height: 6),
+                    Text('Has Weights',
+                        style: TextStyle(color: _hasWeights ? Colors.white : Colors.white54,
+                            fontWeight: _hasWeights ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
+                    Text('Gym / home weights',
+                        style: TextStyle(color: _hasWeights ? Colors.white70 : Colors.white24, fontSize: 10)),
+                  ]),
+                ),
+              ),
+            ),
+          ]),
           const SizedBox(height: 40),
         ]),
       ),
     );
   }
-
+    // 👇 ADDED THIS MISSING FUNCTION HEADER 👇
   Widget _buildBottomButton() {
     final isLast = _currentStep == 1;
     return Container(
@@ -537,7 +621,7 @@ Strict Rules:
         ),
       ),
     );
-  }
+  } // <--- This closing brace was already here, it just belonged to the missing function header
 
   Widget _stepHeader(String title, String subtitle, IconData icon) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
