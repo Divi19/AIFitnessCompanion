@@ -25,6 +25,17 @@ class WorkoutSession {
     required this.timestamp,
   });
 
+  // ── Form quality score ───────────────────────────────────────────────────
+  // score = reps / (reps + totalFeedback) * 100, clamped 10–100.
+  // Perfect form (0 feedback) = 100. Equal feedback to reps = 50.
+  // Minimum 10 so the chart never shows a dead flat zero line.
+  double get formScore {
+    if (reps == 0) return 10.0;
+    final totalFeedback = feedbackMap.values.fold(0, (a, b) => a + b);
+    final raw = reps / (reps + totalFeedback) * 100;
+    return raw.clamp(10.0, 100.0);
+  }
+
   // Human-readable "2 hours ago", "Yesterday", "3 days ago" etc.
   String get timeAgo {
     final diff = DateTime.now().difference(timestamp);
@@ -56,7 +67,6 @@ class WorkoutSession {
     return m > 0 ? '${m}m ${s}s' : '${s}s';
   }
 
-  // Two-sentence preview shown on the session card
   String get debriefPreview {
     final sentences = debriefText.split(RegExp(r'(?<=[.!?])\s+'));
     final preview = sentences.take(2).join(' ').trim();
@@ -80,12 +90,25 @@ class WorkoutSession {
   }
 }
 
+// ── Weekly trend data point ───────────────────────────────────────────────
+// One entry per calendar day that had at least one session.
+// avgScore is the average formScore across all sessions that day.
+class FormTrendPoint {
+  final DateTime date;
+  final double avgScore;   // 0–100
+  final String dayLabel;   // "Mon", "Tue" … "Today", "Yest"
+
+  const FormTrendPoint({
+    required this.date,
+    required this.avgScore,
+    required this.dayLabel,
+  });
+}
+
 class WorkoutSessionService {
-  final _db  = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instance;
 
   // ── Save session + generate debrief ─────────────────────────────────────
-  // Called by Flutter when it receives a valid session broadcast from Kotlin.
-  // Generates the AI debrief first, then saves everything to Firestore.
   Future<WorkoutSession?> saveSession({
     required String exercise,
     required int reps,
@@ -96,11 +119,9 @@ class WorkoutSessionService {
     if (uid == null) return null;
 
     try {
-      // Fetch user profile for personalised debrief
-      final userDoc = await _db.collection('users').doc(uid).get();
+      final userDoc  = await _db.collection('users').doc(uid).get();
       final userData = userDoc.data() ?? {};
 
-      // Generate the debrief text via Gemini
       final debriefText = await _generateDebrief(
         exercise:    exercise,
         reps:        reps,
@@ -109,7 +130,6 @@ class WorkoutSessionService {
         userData:    userData,
       );
 
-      // Save to Firestore under users/{uid}/workout_sessions/{auto-id}
       final docRef = await _db
           .collection('users')
           .doc(uid)
@@ -123,10 +143,8 @@ class WorkoutSessionService {
         'timestamp':   FieldValue.serverTimestamp(),
       });
 
-      // Fetch back to get the server timestamp
       final saved = await docRef.get();
       return WorkoutSession.fromFirestore(saved);
-
     } catch (e) {
       debugPrint('WorkoutSessionService error: $e');
       return null;
@@ -164,6 +182,67 @@ class WorkoutSessionService {
         .map((snap) => snap.docs.map(WorkoutSession.fromFirestore).toList());
   }
 
+  // ── Weekly form trend ────────────────────────────────────────────────────
+  // Returns up to 7 FormTrendPoints for the last 7 calendar days.
+  // Each point = average formScore across all sessions on that day.
+  // Points are sorted oldest→newest so the chart line goes left to right.
+  Future<List<FormTrendPoint>> getWeeklyTrend() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return [];
+
+    final now   = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 6));
+
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workout_sessions')
+        .where('timestamp',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .orderBy('timestamp')
+        .get();
+
+    if (snapshot.docs.isEmpty) return [];
+
+    final sessions =
+        snapshot.docs.map(WorkoutSession.fromFirestore).toList();
+
+    // Group by calendar day
+    final Map<DateTime, List<WorkoutSession>> byDay = {};
+    for (final s in sessions) {
+      final day =
+          DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      byDay.putIfAbsent(day, () => []).add(s);
+    }
+
+    final today    = DateTime(now.year, now.month, now.day);
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    final points = byDay.entries.map((entry) {
+      final day     = entry.key;
+      final daySess = entry.value;
+      final avgScore =
+          daySess.map((s) => s.formScore).reduce((a, b) => a + b) /
+              daySess.length;
+
+      final diff = today.difference(day).inDays;
+      final String label;
+      if (diff == 0) {
+        label = 'Today';
+      } else if (diff == 1) {
+        label = 'Yest';
+      } else {
+        label = weekdays[day.weekday - 1];
+      }
+
+      return FormTrendPoint(date: day, avgScore: avgScore, dayLabel: label);
+    }).toList();
+
+    points.sort((a, b) => a.date.compareTo(b.date));
+    return points;
+  }
+
   // ── Generate debrief via Gemini ──────────────────────────────────────────
   Future<String> _generateDebrief({
     required String exercise,
@@ -174,7 +253,6 @@ class WorkoutSessionService {
   }) async {
     final limitations = _extractLimitations(userData['biometrics']);
 
-    // Sort feedback by frequency so most common issues appear first
     final sortedFeedback = feedbackMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
@@ -184,7 +262,7 @@ class WorkoutSessionService {
             .map((e) => '- "${e.key}" (${e.value} times)')
             .join('\n');
 
-    final durationSec = durationMs ~/ 1000;
+    final durationSec     = durationMs ~/ 1000;
     final exerciseDisplay = _displayName(exercise);
 
     final prompt = '''
@@ -217,24 +295,31 @@ Write a spoken coaching debrief of around 100-150 words. Rules:
         ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'contents': [{'parts': [{'text': prompt}]}],
+          'contents': [
+            {
+              'parts': [
+                {'text': prompt}
+              ]
+            }
+          ],
         }),
       );
 
       debugPrint('=== DEBRIEF: status=${response.statusCode} ===');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final text = data['candidates'][0]['content']['parts'][0]['text'] as String;
+        final text =
+            data['candidates'][0]['content']['parts'][0]['text'] as String;
         debugPrint('=== DEBRIEF: generated ${text.length} chars ===');
         return text;
       } else {
-        debugPrint('=== DEBRIEF FAILED: ${response.statusCode} body=${response.body} ===');
+        debugPrint(
+            '=== DEBRIEF FAILED: ${response.statusCode} body=${response.body} ===');
       }
     } catch (e) {
       debugPrint('Debrief generation error: $e');
     }
 
-    // Fallback if Gemini fails
     return 'Great session! You completed $reps $exerciseDisplay reps in ${durationSec}s. Keep it up!';
   }
 
@@ -242,7 +327,9 @@ Write a spoken coaching debrief of around 100-150 words. Rules:
     if (biometrics == null || biometrics['noLimitations'] == true) return [];
     final active = <String>[];
     void check(Map<String, dynamic>? section) {
-      section?.forEach((k, v) { if (v == true) active.add(k); });
+      section?.forEach((k, v) {
+        if (v == true) active.add(k);
+      });
     }
     check(biometrics['upperBody'] as Map<String, dynamic>?);
     check(biometrics['lowerBody'] as Map<String, dynamic>?);
@@ -252,10 +339,15 @@ Write a spoken coaching debrief of around 100-150 words. Rules:
 
   String _displayName(String exercise) {
     const names = {
-      'squat': 'Squat', 'pushup': 'Push Up', 'bicep_curl': 'Bicep Curl',
-      'jumping_jack': 'Jumping Jack', 'lunge_left': 'Left Lunge',
-      'lunge_right': 'Right Lunge', 'sit_up': 'Sit Up',
-      'plank': 'Plank', 'glute_bridge': 'Glute Bridge',
+      'squat':        'Squat',
+      'pushup':       'Push Up',
+      'bicep_curl':   'Bicep Curl',
+      'jumping_jack': 'Jumping Jack',
+      'lunge_left':   'Left Lunge',
+      'lunge_right':  'Right Lunge',
+      'sit_up':       'Sit Up',
+      'plank':        'Plank',
+      'glute_bridge': 'Glute Bridge',
     };
     return names[exercise] ?? exercise;
   }
