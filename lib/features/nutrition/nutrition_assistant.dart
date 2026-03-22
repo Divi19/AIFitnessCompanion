@@ -25,6 +25,10 @@ class _NutritionAssistantScreenState
   bool _isLoading = false;
 
   WorkoutSession? _expandedSession;
+  // Lifted here so it survives the Expanded wrapper toggling around
+  // _SessionHistoryStrip — keeping it in the strip's State caused it to
+  // reset whenever the widget tree changed (e.g. Expanded added/removed).
+  String? _selectedDay;
 
   Future<void> _sendMessage({String? overrideText}) async {
     final question = overrideText ?? _controller.text.trim();
@@ -143,6 +147,8 @@ class _NutritionAssistantScreenState
               child: _SessionHistoryStrip(
                 sessionService:  _sessionService,
                 expandedSession: _expandedSession,
+                selectedDay:     _selectedDay,
+                onDaySelected:   (day) => setState(() => _selectedDay = day),
                 onSessionTap: (session) {
                   setState(() {
                     _expandedSession =
@@ -164,6 +170,8 @@ class _NutritionAssistantScreenState
           _SessionHistoryStrip(
             sessionService:  _sessionService,
             expandedSession: _expandedSession,
+            selectedDay:     _selectedDay,
+            onDaySelected:   (day) => setState(() => _selectedDay = day),
             onSessionTap: (session) {
               setState(() {
                 _expandedSession =
@@ -272,12 +280,16 @@ class _NutritionAssistantScreenState
 class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
   final WorkoutSession? expandedSession;
+  final String? selectedDay;
+  final void Function(String?) onDaySelected;
   final void Function(WorkoutSession) onSessionTap;
   final void Function(WorkoutSession) onAskFollowUp;
 
   const _SessionHistoryStrip({
     required this.sessionService,
     required this.expandedSession,
+    required this.selectedDay,
+    required this.onDaySelected,
     required this.onSessionTap,
     required this.onAskFollowUp,
   });
@@ -289,9 +301,8 @@ class _SessionHistoryStrip extends StatefulWidget {
 class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
-
-  // null = date boxes visible, non-null = drilled into that day
-  String? _selectedDay;
+  // _selectedDay is now owned by the parent screen so it survives
+  // widget tree restructuring (Expanded wrapping/unwrapping)
 
   @override
   void initState() {
@@ -384,8 +395,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
         final groups = _groupByDay(sessions);
 
-        if (_selectedDay != null && !groups.containsKey(_selectedDay)) {
-          _selectedDay = null;
+        if (widget.selectedDay != null && !groups.containsKey(widget.selectedDay)) {
+          widget.onDaySelected(null);
         }
 
         return Column(
@@ -398,13 +409,13 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(
                 children: [
-                  if (_selectedDay != null) ...[
+                  if (widget.selectedDay != null) ...[
                     GestureDetector(
                       onTap: () {
                         if (widget.expandedSession != null) {
                           widget.onSessionTap(widget.expandedSession!);
                         }
-                        setState(() => _selectedDay = null);
+                        widget.onDaySelected(null);
                       },
                       child: const Icon(Icons.arrow_back_ios_new_rounded,
                           color: Color(0xFFB9FF2B), size: 12),
@@ -412,8 +423,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                     const SizedBox(width: 6),
                   ],
                   Text(
-                    _selectedDay != null
-                        ? _selectedDay!.toUpperCase()
+                    widget.selectedDay != null
+                        ? widget.selectedDay!.toUpperCase()
                         : 'RECENT SESSIONS',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.35),
@@ -431,7 +442,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               height: 88,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                child: _selectedDay == null
+                child: widget.selectedDay == null
 
                     // DATE BOXES
                     ? ListView(
@@ -442,7 +453,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                           final label       = entry.key;
                           final daySessions = entry.value;
                           return GestureDetector(
-                            onTap: () => setState(() => _selectedDay = label),
+                            onTap: () => widget.onDaySelected(label),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               margin: const EdgeInsets.only(right: 10),
@@ -515,10 +526,10 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                     // SESSION CARDS — identical style to original
                     : ListView(
-                        key: ValueKey(_selectedDay),
+                        key: ValueKey(widget.selectedDay),
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: (groups[_selectedDay] ?? []).map((session) {
+                        children: (groups[widget.selectedDay] ?? []).map((session) {
                           final isExpanded =
                               widget.expandedSession?.id == session.id;
                           return GestureDetector(
