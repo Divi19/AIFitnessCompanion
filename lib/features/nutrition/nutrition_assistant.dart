@@ -137,7 +137,30 @@ class _NutritionAssistantScreenState
       body: Column(
         children: [
 
-          // ── Session History Strip ────────────────────────────────────────
+          // ── Session History Strip — takes all space when debrief open ───
+          if (_expandedSession != null)
+            Expanded(
+              child: _SessionHistoryStrip(
+                sessionService:  _sessionService,
+                expandedSession: _expandedSession,
+                onSessionTap: (session) {
+                  setState(() {
+                    _expandedSession =
+                        _expandedSession?.id == session.id ? null : session;
+                  });
+                },
+                onAskFollowUp: (session) {
+                  setState(() => _expandedSession = null);
+                  _sendMessage(
+                    overrideText:
+                        'Based on my ${session.exerciseDisplayName} session where I did '
+                        '${session.reps} reps, ${session.debriefText} '
+                        'What should I focus on to improve next time?',
+                  );
+                },
+              ),
+            )
+          else
           _SessionHistoryStrip(
             sessionService:  _sessionService,
             expandedSession: _expandedSession,
@@ -158,7 +181,10 @@ class _NutritionAssistantScreenState
             },
           ),
 
-          // ── Chat Messages ────────────────────────────────────────────────
+          // ── Chat Messages — hidden when debrief panel is open ────────────
+          // When a session is expanded the debrief panel takes all available
+          // space. The chat area is collapsed to zero so there is no overflow.
+          if (_expandedSession == null)
           Expanded(
             child: _messages.isEmpty
                 ? Center(
@@ -364,6 +390,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
           children: [
 
             // ── Header ───────────────────────────────────────────────────
@@ -558,12 +585,14 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Expanded debrief panel — inline, original style ──────────
-            // Removed ConstrainedBox so text expands to full available height.
-            // No modal sheet — stays inline so it doesn't cover the app bar
-            // or bottom navigation.
+            // ── Expanded debrief panel — fills all remaining space ───────
+            // Wrapped in Expanded so it stretches from below the strip all
+            // the way to the input bar without overflowing.
             if (widget.expandedSession != null)
-              AnimatedContainer(
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 padding: const EdgeInsets.all(16),
@@ -593,7 +622,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                             ),
                           ),
                         ),
-                        // TTS play/stop button — identical to original
+                        // TTS play/stop button
                         GestureDetector(
                           onTap: () => _toggleSpeaking(
                               widget.expandedSession!.debriefText),
@@ -625,36 +654,27 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                     const SizedBox(height: 10),
 
-                    // Debrief text — constrained to available space with
-                    // internal scroll so long debriefs never overflow
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.35,
+                    // Debrief text — no height constraint, scrollable via parent
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            widget.expandedSession!.debriefText,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              height: 1.7,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
+                      child: Text(
+                        widget.expandedSession!.debriefText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.7,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
-                    // Ask follow-up button — identical to original
+                    // Ask follow-up button
                     GestureDetector(
                       onTap: () =>
                           widget.onAskFollowUp(widget.expandedSession!),
@@ -686,6 +706,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       ),
                     ),
                   ],
+                ),
+              ),
                 ),
               ),
 
