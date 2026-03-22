@@ -247,7 +247,7 @@ class _NutritionAssistantScreenState
 }
 
 // ── Session History Strip — day-grouped ───────────────────────────────────
-class _SessionHistoryStrip extends StatelessWidget {
+class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
   final void Function(WorkoutSession) onSessionTap;
 
@@ -256,33 +256,34 @@ class _SessionHistoryStrip extends StatelessWidget {
     required this.onSessionTap,
   });
 
-  // Groups a flat list of sessions into an ordered map of dayLabel → sessions
+  @override
+  State<_SessionHistoryStrip> createState() => _SessionHistoryStripState();
+}
+
+class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
+  // null = showing date boxes, non-null = drilled into that day
+  String? _selectedDay;
+
   Map<String, List<WorkoutSession>> _groupByDay(List<WorkoutSession> sessions) {
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-
     final Map<String, List<WorkoutSession>> groups = {};
-
     for (final s in sessions) {
       final d    = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
       final diff = today.difference(d).inDays;
-
       final String label;
       if (diff == 0) {
         label = 'Today';
       } else if (diff == 1) {
         label = 'Yesterday';
       } else {
-        // e.g. "Mon 18 Mar"
         const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         const months   = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         label = '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
       }
-
       groups.putIfAbsent(label, () => []).add(s);
     }
-
     return groups;
   }
 
@@ -290,139 +291,190 @@ class _SessionHistoryStrip extends StatelessWidget {
     switch (exercise) {
       case 'squat':
       case 'lunge_left':
-      case 'lunge_right':
-        return Icons.directions_run;
-      case 'pushup':
-        return Icons.fitness_center;
-      case 'bicep_curl':
-        return Icons.sports_gymnastics;
-      case 'jumping_jack':
-        return Icons.directions_walk;
+      case 'lunge_right':  return Icons.directions_run;
+      case 'pushup':       return Icons.fitness_center;
+      case 'bicep_curl':   return Icons.sports_gymnastics;
+      case 'jumping_jack': return Icons.directions_walk;
       case 'sit_up':
-      case 'glute_bridge':
-        return Icons.self_improvement;
-      case 'plank':
-        return Icons.accessibility_new;
-      default:
-        return Icons.sports;
+      case 'glute_bridge': return Icons.self_improvement;
+      case 'plank':        return Icons.accessibility_new;
+      default:             return Icons.sports;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<WorkoutSession>>(
-      stream: sessionService.sessionsStream(),
+      stream: widget.sessionService.sessionsStream(),
       builder: (context, snapshot) {
         final sessions = snapshot.data ?? [];
         if (sessions.isEmpty) return const SizedBox.shrink();
 
         final groups = _groupByDay(sessions);
 
+        // If selected day no longer exists (e.g. data changed), reset
+        if (_selectedDay != null && !groups.containsKey(_selectedDay)) {
+          _selectedDay = null;
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section header
+            // ── Header row — label + back arrow when drilled in ─────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'RECENT SESSIONS',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.35),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ),
-
-            // One row per day
-            ...groups.entries.map((entry) {
-              final dayLabel     = entry.key;
-              final daySessions  = entry.value;
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Row(
                 children: [
-                  // Day label
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(
-                      dayLabel,
-                      style: const TextStyle(
-                        color: Color(0xFFB9FF2B),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
+                  if (_selectedDay != null) ...[
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedDay = null),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Color(0xFFB9FF2B), size: 14),
                     ),
-                  ),
-
-                  // Horizontal scroll of session cards for this day
-                  SizedBox(
-                    height: 80,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: daySessions.length,
-                      itemBuilder: (context, index) {
-                        final session = daySessions[index];
-                        return GestureDetector(
-                          onTap: () => onSessionTap(session),
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 10),
-                            width: 140,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A1A),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.white12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(_iconFor(session.exercise),
-                                        color: const Color(0xFFB9FF2B),
-                                        size: 14),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        session.exerciseDisplayName,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${session.reps} reps · ${session.durationFormatted}',
-                                  style: const TextStyle(
-                                      color: Colors.white54, fontSize: 11),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  session.timeAgo,
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.3),
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    _selectedDay ?? 'RECENT SESSIONS',
+                    style: TextStyle(
+                      color: _selectedDay != null
+                          ? const Color(0xFFB9FF2B)
+                          : Colors.white.withOpacity(0.35),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
                     ),
                   ),
                 ],
-              );
-            }),
+              ),
+            ),
+
+            // ── Single horizontal scroll strip ───────────────────────
+            SizedBox(
+              height: 88,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _selectedDay == null
+                    // DATE BOXES — one per day
+                    ? ListView(
+                        key: const ValueKey('dates'),
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: groups.entries.map((entry) {
+                          final label    = entry.key;
+                          final daySessions = entry.value;
+                          return GestureDetector(
+                            onTap: () => setState(() => _selectedDay = label),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 10),
+                              width: 120,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    label,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${daySessions.length} session${daySessions.length == 1 ? '' : 's'}',
+                                    style: const TextStyle(
+                                        color: Colors.white54, fontSize: 11),
+                                  ),
+                                  const Spacer(),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'View',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.35),
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Icon(Icons.chevron_right,
+                                          color: Colors.white.withOpacity(0.35),
+                                          size: 12),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      )
+                    // SESSION BOXES — sessions for the selected day
+                    : ListView(
+                        key: ValueKey(_selectedDay),
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: (groups[_selectedDay] ?? []).map((session) {
+                          return GestureDetector(
+                            onTap: () => widget.onSessionTap(session),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 10),
+                              width: 140,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(_iconFor(session.exercise),
+                                          color: const Color(0xFFB9FF2B),
+                                          size: 14),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          session.exerciseDisplayName,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${session.reps} reps · ${session.durationFormatted}',
+                                    style: const TextStyle(
+                                        color: Colors.white54, fontSize: 11),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    session.timeAgo,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.3),
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+              ),
+            ),
 
             const Divider(color: Colors.white10, height: 1),
           ],
