@@ -2,6 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/quickpose_service.dart';
 import '../services/workout_session_service.dart';
+import '../services/audio_feedback_service.dart';
+import '../widgets/exercise_preview_dialog.dart';
+
+// This screen no longer embeds a native camera view.
+// Instead it launches a full-screen native Android Activity (QuickPoseActivity)
+// which owns the camera entirely. Results stream back via EventChannel.
+// Flutter only renders the overlay UI on top via a transparent window — but
+// since QuickPoseActivity is a separate Activity, the overlay is shown here
+// as a results/stats screen that sits in front in the back stack.
+//
+// UX flow:
+// 1. User taps the Pose tab
+// 2. This screen requests camera permission
+// 3. On grant, launches QuickPoseActivity full screen
+// 4. Results stream back and are shown here when user returns
+// 5. User presses back from QuickPoseActivity to return to Flutter
 
 class WorkoutTrackerScreen extends StatefulWidget {
   const WorkoutTrackerScreen({Key? key}) : super(key: key);
@@ -15,26 +31,33 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
   final QuickPoseService      _quickPoseService = QuickPoseService();
   final WorkoutSessionService _sessionService   = WorkoutSessionService();
+  final AudioFeedbackService _audioService = AudioFeedbackService();
 
-  bool   _hasPermission    = false;
-  bool   _isRunning        = false;
-  int    _repCount         = 0;
-  String _feedback         = '';
-  String _status           = 'idle';
+  bool _hasPermission = false;
+  bool _isRunning = false;
+  int _repCount = 0;
+  String _feedback = '';
+  String _status = 'idle';
   String _selectedExercise = 'squat';
 
   // Tracks sessions saved in this screen visit for the snackbar notification
   bool _savingSession = false;
+  bool _isTimerMode = false;
+
+  // Exercises that use timer instead of rep counter
+  static const _timerExercises = {'plank'};
+
+  bool _isTimerExercise(String exercise) => _timerExercises.contains(exercise);
 
   final Map<String, String> _exercises = {
-    'Squat':        'squat',
-    'Push Up':      'pushup',
-    'Bicep Curl':   'bicep_curl',
+    'Squat': 'squat',
+    'Push Up': 'pushup',
+    'Bicep Curl': 'bicep_curl',
     'Jumping Jack': 'jumping_jack',
-    'Left Lunge':   'lunge_left',
-    'Right Lunge':  'lunge_right',
-    'Sit Up':       'sit_up',
-    'Plank':        'plank',
+    'Left Lunge': 'lunge_left',
+    'Right Lunge': 'lunge_right',
+    'Sit Up': 'sit_up',
+    'Plank': 'plank',
     'Glute Bridge': 'glute_bridge',
   };
 
@@ -49,6 +72,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _quickPoseService.stopCamera();
+    _audioService.dispose();
     super.dispose();
   }
 
@@ -69,18 +93,41 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     }
   }
 
+  /// Formats elapsed seconds into MM:SS display format.
+  /// Example: 75 seconds → "01:15"
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
   void _listenToResults() {
-    _quickPoseService.resultsStream.listen(
-      (data) {
-        if (!mounted) return;
-        setState(() {
-          _repCount = (data['repCount'] as int?)    ?? _repCount;
-          _feedback = (data['feedback'] as String?) ?? '';
-          _status   = (data['status']   as String?) ?? 'loading';
-        });
-      },
-      onError: (e) => debugPrint('QuickPose error: $e'),
-    );
+    _quickPoseService.resultsStream.listen((data) {
+      if (!mounted) return;
+
+      final newRepCount = (data['repCount'] as int?) ?? _repCount;
+      final newFeedback = (data['feedback'] as String?) ?? '';
+      final newStatus = (data['status'] as String?) ?? 'loading';
+      final newIsTimer = (data['isTimer'] as bool?) ?? false;
+
+      // Trigger audio for rep count if it changed
+      if (newRepCount != _repCount) {
+        _audioService.announceRepCount(newRepCount);
+      }
+
+      // Trigger audio for feedback if it changed and is not empty
+      if (newFeedback.isNotEmpty && newFeedback != _feedback) {
+        _audioService.speak(newFeedback);
+      }
+
+      setState(() {
+        _repCount = newRepCount;
+        _feedback = newFeedback;
+        _status = newStatus;
+        _isTimerMode = newIsTimer;
+      });
+    }, onError: (e) => debugPrint('QuickPose error: $e'));
   }
 
   // ── Listen for valid session summaries from Kotlin ───────────────────────
@@ -136,11 +183,18 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
   Future<void> _startWorkout() async {
     if (!_hasPermission) return;
+
+    // Show exercise preview video before launching camera.
+    // _startWorkout waits here until the dialog is dismissed —
+    // either by video ending or user tapping X.
+    await showExercisePreview(context, _selectedExercise);
+    if (!mounted) return;
+
     setState(() {
       _isRunning = true;
-      _repCount  = 0;
-      _feedback  = '';
-      _status    = 'loading';
+      _repCount = 0;
+      _feedback = '';
+      _status = 'loading';
     });
     await _quickPoseService.startCamera(_selectedExercise);
   }
@@ -148,9 +202,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   Future<void> _switchExercise(String exerciseKey) async {
     setState(() {
       _selectedExercise = exerciseKey;
-      _repCount         = 0;
-      _feedback         = '';
-      _status           = 'loading';
+      _repCount = 0;
+      _feedback = '';
+      _status = 'loading';
+      _isTimerMode = _isTimerExercise(exerciseKey);
     });
     if (_isRunning) {
       await _quickPoseService.switchExercise(exerciseKey);
@@ -165,8 +220,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
-            // Header
+            // ── Header ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: Row(
@@ -176,7 +230,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const Spacer(),
@@ -193,13 +247,115 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                         color: const Color(0xFFB9FF2B).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.5)),
+
+                  // How To — rewatch exercise video at any time
+                  GestureDetector(
+                    onTap: () =>
+                        showExercisePreview(context, _selectedExercise),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
-                      child: const Text('LIVE',
-                          style: TextStyle(
-                              color: Color(0xFFB9FF2B),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.play_circle_outline,
+                            color: Colors.white54,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'How to',
+                            style: TextStyle(
+                              color: Colors.white54,
                               fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1)),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Audio toggle button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _audioService.setEnabled(!_audioService.isEnabled);
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _audioService.isEnabled
+                            ? const Color(0xFFB9FF2B).withOpacity(0.15)
+                            : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _audioService.isEnabled
+                              ? const Color(0xFFB9FF2B).withOpacity(0.5)
+                              : Colors.white12,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _audioService.isEnabled
+                                ? Icons.volume_up
+                                : Icons.volume_off,
+                            color: _audioService.isEnabled
+                                ? const Color(0xFFB9FF2B)
+                                : Colors.white38,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _audioService.isEnabled ? 'Audio ON' : 'Audio OFF',
+                            style: TextStyle(
+                              color: _audioService.isEnabled
+                                  ? const Color(0xFFB9FF2B)
+                                  : Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  if (_status == 'success')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB9FF2B).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                        ),
+                      ),
+                      child: const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          color: Color(0xFFB9FF2B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -212,7 +368,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
               child: Column(
                 children: [
                   Text(
-                    '$_repCount',
+                    _isTimerMode
+                        ? _formatTime(_repCount) // Shows MM:SS for timer
+                        : '$_repCount', // Shows number for reps
                     style: const TextStyle(
                       color: Color(0xFFB9FF2B),
                       fontSize: 100,
@@ -220,8 +378,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       height: 1,
                     ),
                   ),
-                  const Text('reps',
-                      style: TextStyle(color: Colors.white38, fontSize: 18)),
+                  Text(
+                    _isTimerMode ? 'elapsed' : 'reps',
+                    style: const TextStyle(color: Colors.white38, fontSize: 18),
+                  ),
                 ],
               ),
             ),
@@ -233,11 +393,16 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF5E00).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFF5E00).withOpacity(0.5)),
+                    border: Border.all(
+                      color: const Color(0xFFFF5E00).withOpacity(0.5),
+                    ),
                   ),
                   child: Text(
                     _feedback,
@@ -274,7 +439,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected ? const Color(0xFFB9FF2B) : const Color(0xFF1A1A1A),
                         borderRadius: BorderRadius.circular(22),
@@ -310,23 +478,39 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF5E00),
                     disabledBackgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     elevation: 0,
                   ),
                   child: _isRunning
                       ? const Text(
                           'Running in Camera View — Press Back to Return',
-                          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                           textAlign: TextAlign.center,
                         )
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Text(
-                              _hasPermission ? 'Start Workout' : 'Camera Permission Required',
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                              _hasPermission
+                                  ? 'Start Workout'
+                                  : 'Camera Permission Required',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ],
                         ),

@@ -39,6 +39,11 @@ dependencies:
   cloud_functions: ^6.0.6
   firebase_ai: ^3.8.0
 
+  # For audio
+  flutter_tts: ^4.0.2
+
+  youtube_player_flutter: ^9.1.1
+  
   # PDF reading
   syncfusion_flutter_pdf: ^32.2.7
 
