@@ -16,15 +16,14 @@ class NutritionAssistantScreen extends StatefulWidget {
 
 class _NutritionAssistantScreenState
     extends State<NutritionAssistantScreen> {
-  final _ragService     = RagService();
-  final _sessionService = WorkoutSessionService();
-  final _controller     = TextEditingController();
+  final _ragService       = RagService();
+  final _sessionService   = WorkoutSessionService();
+  final _controller       = TextEditingController();
   final _scrollController = ScrollController();
 
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
-  // Selected session for debrief expansion — null means none selected
   WorkoutSession? _expandedSession;
 
   Future<void> _sendMessage({String? overrideText}) async {
@@ -244,8 +243,6 @@ class _NutritionAssistantScreenState
 }
 
 // ── Session History Strip ─────────────────────────────────────────────────
-// Shows date boxes first. Tapping a date drills into that day's sessions.
-// All card and panel styling is identical to the original design.
 class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
   final WorkoutSession? expandedSession;
@@ -267,7 +264,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
 
-  // null = showing date boxes, non-null = drilled into that day
+  // null = date boxes visible, non-null = drilled into that day
   String? _selectedDay;
 
   @override
@@ -288,7 +285,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   @override
   void didUpdateWidget(_SessionHistoryStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Stop TTS if expanded session changed or panel collapsed
     if (oldWidget.expandedSession?.id != widget.expandedSession?.id) {
       _stopSpeaking();
     }
@@ -314,7 +310,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
     if (mounted) setState(() => _isSpeaking = false);
   }
 
-  // Groups sessions into ordered map of dayLabel → sessions
   Map<String, List<WorkoutSession>> _groupByDay(List<WorkoutSession> sessions) {
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -363,7 +358,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
         final groups = _groupByDay(sessions);
 
-        // Reset if selected day was removed
         if (_selectedDay != null && !groups.containsKey(_selectedDay)) {
           _selectedDay = null;
         }
@@ -372,7 +366,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            // ── Header row ───────────────────────────────────────────────
+            // ── Header ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(
@@ -380,7 +374,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                   if (_selectedDay != null) ...[
                     GestureDetector(
                       onTap: () {
-                        // Collapse any expanded session when going back
                         if (widget.expandedSession != null) {
                           widget.onSessionTap(widget.expandedSession!);
                         }
@@ -406,15 +399,14 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Horizontal scroll strip ──────────────────────────────────
+            // ── Strip ────────────────────────────────────────────────────
             SizedBox(
               height: 88,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 child: _selectedDay == null
 
-                    // ── DATE BOXES ────────────────────────────────────────
-                    // Same orange/dark styling as session cards in the original
+                    // DATE BOXES
                     ? ListView(
                         key: const ValueKey('dates'),
                         scrollDirection: Axis.horizontal,
@@ -494,7 +486,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         }).toList(),
                       )
 
-                    // ── SESSION CARDS — identical style to original ────────
+                    // SESSION CARDS — identical style to original
                     : ListView(
                         key: ValueKey(_selectedDay),
                         scrollDirection: Axis.horizontal,
@@ -566,15 +558,135 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Expanded debrief panel — identical to original but full page ──
+            // ── Expanded debrief panel — inline, original style ──────────
+            // Removed ConstrainedBox so text expands to full available height.
+            // No modal sheet — stays inline so it doesn't cover the app bar
+            // or bottom navigation.
             if (widget.expandedSession != null)
-              _FullPageDebriefPanel(
-                session:        widget.expandedSession!,
-                isSpeaking:     _isSpeaking,
-                onToggleSpeaking: () =>
-                    _toggleSpeaking(widget.expandedSession!.debriefText),
-                onAskFollowUp:  () =>
-                    widget.onAskFollowUp(widget.expandedSession!),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    // Header row — identical to original
+                    Row(
+                      children: [
+                        const Icon(Icons.record_voice_over,
+                            color: Color(0xFFFF5E00), size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${widget.expandedSession!.exerciseDisplayName} Debrief',
+                            style: const TextStyle(
+                              color: Color(0xFFFF5E00),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        // TTS play/stop button — identical to original
+                        GestureDetector(
+                          onTap: () => _toggleSpeaking(
+                              widget.expandedSession!.debriefText),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: _isSpeaking
+                                  ? const Color(0xFFFF5E00)
+                                  : const Color(0xFFFF5E00).withOpacity(0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFFF5E00).withOpacity(0.6),
+                              ),
+                            ),
+                            child: Icon(
+                              _isSpeaking
+                                  ? Icons.stop_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: _isSpeaking
+                                  ? Colors.white
+                                  : const Color(0xFFFF5E00),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Debrief text — constrained to available space with
+                    // internal scroll so long debriefs never overflow
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.35,
+                      ),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            widget.expandedSession!.debriefText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.7,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Ask follow-up button — identical to original
+                    GestureDetector(
+                      onTap: () =>
+                          widget.onAskFollowUp(widget.expandedSession!),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFFB9FF2B).withOpacity(0.4)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chat_bubble_outline,
+                                color: Color(0xFFB9FF2B), size: 14),
+                            SizedBox(width: 6),
+                            Text(
+                              'Ask the coach about this session',
+                              style: TextStyle(
+                                color: Color(0xFFB9FF2B),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
             const Divider(color: Colors.white10, height: 1),
@@ -582,177 +694,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
         );
       },
     );
-  }
-}
-
-// ── Full page debrief panel ───────────────────────────────────────────────
-// Identical visual style to the original inline panel but uses
-// a DraggableScrollableSheet so it fills the whole screen.
-class _FullPageDebriefPanel extends StatelessWidget {
-  final WorkoutSession session;
-  final bool isSpeaking;
-  final VoidCallback onToggleSpeaking;
-  final VoidCallback onAskFollowUp;
-
-  const _FullPageDebriefPanel({
-    required this.session,
-    required this.isSpeaking,
-    required this.onToggleSpeaking,
-    required this.onAskFollowUp,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Show as a modal bottom sheet that covers the full screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => DraggableScrollableSheet(
-          initialChildSize: 0.92,
-          minChildSize:     0.5,
-          maxChildSize:     0.95,
-          builder: (_, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              // Same orange border as the original inline panel
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-
-                // Drag handle
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    width: 40, height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-
-                // Header — identical to original
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.record_voice_over,
-                          color: Color(0xFFFF5E00), size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${session.exerciseDisplayName} Debrief',
-                          style: const TextStyle(
-                            color: Color(0xFFFF5E00),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      // TTS play/stop button — identical to original
-                      GestureDetector(
-                        onTap: onToggleSpeaking,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isSpeaking
-                                ? const Color(0xFFFF5E00)
-                                : const Color(0xFFFF5E00).withOpacity(0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFFF5E00).withOpacity(0.6),
-                            ),
-                          ),
-                          child: Icon(
-                            isSpeaking
-                                ? Icons.stop_rounded
-                                : Icons.play_arrow_rounded,
-                            color: isSpeaking
-                                ? Colors.white
-                                : const Color(0xFFFF5E00),
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Debrief text — same dark container style, now scrollable full page
-                Expanded(
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        session.debriefText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          height: 1.7,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                // Ask follow-up button — identical to original
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  child: GestureDetector(
-                    onTap: onAskFollowUp,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFB9FF2B).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: const Color(0xFFB9FF2B).withOpacity(0.4)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.chat_bubble_outline,
-                              color: Color(0xFFB9FF2B), size: 14),
-                          SizedBox(width: 6),
-                          Text(
-                            'Ask the coach about this session',
-                            style: TextStyle(
-                              color: Color(0xFFB9FF2B),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    });
-
-    // Return empty box — the sheet is shown via postFrameCallback
-    return const SizedBox.shrink();
   }
 }
 
