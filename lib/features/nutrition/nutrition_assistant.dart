@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -20,19 +21,30 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   final _controller       = TextEditingController();
   final _scrollController = ScrollController();
 
-  // Lifted here to preserve horizontal scroll position across Expanded rebuilds
   final _stripScrollController = ScrollController();
-  final GlobalKey _stripKey = GlobalKey();
+  final GlobalKey _stripKey    = GlobalKey();
 
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
   WorkoutSession? _expandedSession;
-  String? _selectedDay;
+  String?         _selectedDay;
+
+  // Weekly trend — loaded once on init and refreshed after each new session
+  List<FormTrendPoint> _trendPoints = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrend();
+  }
+
+  Future<void> _loadTrend() async {
+    final points = await _sessionService.getWeeklyTrend();
+    if (mounted) setState(() => _trendPoints = points);
+  }
 
   // ── Send message ─────────────────────────────────────────────────────────
-  // overrideText = what gets sent to Gemini (full context)
-  // displayText  = what appears in the chat bubble (short, user-friendly)
   Future<void> _sendMessage({String? overrideText, String? displayText}) async {
     final question = overrideText ?? _controller.text.trim();
     if (question.isEmpty || _isLoading) return;
@@ -70,7 +82,8 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
         setState(() {
           if (isFirstChunk) {
             _isLoading = false;
-            _messages.add({'role': 'assistant', 'text': chunk, 'isStreaming': true});
+            _messages.add(
+                {'role': 'assistant', 'text': chunk, 'isStreaming': true});
             isFirstChunk = false;
           } else {
             final lastIndex   = _messages.length - 1;
@@ -128,7 +141,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
       expandedSession:       _expandedSession,
       selectedDay:           _selectedDay,
       stripScrollController: _stripScrollController,
-      onDaySelected:         (day) => setState(() => _selectedDay = day),
+      onDaySelected: (day) => setState(() => _selectedDay = day),
       onSessionTap: (session) {
         setState(() {
           _expandedSession =
@@ -147,6 +160,9 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
               'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
         );
       },
+      // Refresh the trend chart whenever a session card is tapped
+      // (covers the case where a new session was just saved)
+      onRefreshTrend: _loadTrend,
     );
   }
 
@@ -174,13 +190,20 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
       ),
       body: Column(
         children: [
-          // Strip takes all space when debrief is open, natural height otherwise
+
+          // ── Weekly form trend chart ──────────────────────────────────────
+          // Only shown when the debrief panel is not open and there is
+          // at least 2 days of data to draw a meaningful line.
+          if (_expandedSession == null && _trendPoints.length >= 2)
+            _WeeklyTrendChart(points: _trendPoints),
+
+          // ── Session History Strip ────────────────────────────────────────
           if (_expandedSession != null)
             Expanded(child: _buildStrip())
           else
             _buildStrip(),
 
-          // Chat hidden when debrief panel is open
+          // ── Chat Messages ────────────────────────────────────────────────
           if (_expandedSession == null)
             Expanded(
               child: _messages.isEmpty
@@ -221,7 +244,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                     ),
             ),
 
-          // Input bar always visible
+          // ── Input bar ────────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -265,6 +288,225 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   }
 }
 
+// ── Weekly Form Trend Chart ───────────────────────────────────────────────
+// A compact line chart showing form quality score (0–100) per day over
+// the last 7 days. Uses fl_chart's LineChart widget.
+// Matches the app's dark/orange/green colour palette exactly.
+class _WeeklyTrendChart extends StatelessWidget {
+  final List<FormTrendPoint> points;
+
+  const _WeeklyTrendChart({required this.points});
+
+  // Computes the trend direction label shown in the header pill
+  String _trendLabel() {
+    if (points.length < 2) return '';
+    final first = points.first.avgScore;
+    final last  = points.last.avgScore;
+    final delta = last - first;
+    if (delta >= 5)  return '↑ Improving';
+    if (delta <= -5) return '↓ Declining';
+    return '→ Steady';
+  }
+
+  Color _trendColour() {
+    if (points.length < 2) return Colors.white54;
+    final delta = points.last.avgScore - points.first.avgScore;
+    if (delta >= 5)  return const Color(0xFFB9FF2B);
+    if (delta <= -5) return const Color(0xFFFF5E00);
+    return Colors.white54;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Build fl_chart spots — x = index, y = avgScore
+    final spots = points.asMap().entries.map((e) {
+      return FlSpot(e.key.toDouble(), e.value.avgScore);
+    }).toList();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          // Header row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'WEEKLY FORM TREND',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _trendColour().withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border:
+                      Border.all(color: _trendColour().withOpacity(0.4)),
+                ),
+                child: Text(
+                  _trendLabel(),
+                  style: TextStyle(
+                    color: _trendColour(),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Chart
+          SizedBox(
+            height: 110,
+            child: LineChart(
+              LineChartData(
+                minY: 0,
+                maxY: 100,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 25,
+                  getDrawingHorizontalLine: (_) => FlLine(
+                    color: Colors.white.withOpacity(0.05),
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      interval: 50,
+                      getTitlesWidget: (value, _) => Text(
+                        '${value.toInt()}',
+                        style: const TextStyle(
+                            color: Colors.white24, fontSize: 9),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 22,
+                      getTitlesWidget: (value, _) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= points.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final isToday =
+                            points[idx].dayLabel == 'Today';
+                        return Text(
+                          points[idx].dayLabel,
+                          style: TextStyle(
+                            color: isToday
+                                ? const Color(0xFFB9FF2B)
+                                : Colors.white38,
+                            fontSize: 9,
+                            fontWeight: isToday
+                                ? FontWeight.w800
+                                : FontWeight.w400,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => const Color(0xFF2A2A2A),
+                    getTooltipItems: (spots) => spots
+                        .map((s) => LineTooltipItem(
+                              '${s.y.toInt()}%',
+                              const TextStyle(
+                                color: Color(0xFFFF5E00),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    curveSmoothness: 0.35,
+                    color: const Color(0xFFFF5E00),
+                    barWidth: 2.5,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, _, __, ___) {
+                        final isToday = points[spot.x.toInt()].dayLabel ==
+                            'Today';
+                        return FlDotCirclePainter(
+                          radius: isToday ? 5 : 3,
+                          color: isToday
+                              ? const Color(0xFFB9FF2B)
+                              : const Color(0xFFFF5E00),
+                          strokeWidth: isToday ? 2 : 0,
+                          strokeColor: const Color(0xFF0D0D0D),
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFFFF5E00).withOpacity(0.18),
+                          const Color(0xFFFF5E00).withOpacity(0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          // Footer: best score this week
+          Builder(builder: (_) {
+            final best = points
+                .map((p) => p.avgScore)
+                .reduce((a, b) => a > b ? a : b);
+            return Text(
+              'Best this week: ${best.toInt()}% form score',
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10,
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Session History Strip ─────────────────────────────────────────────────
 class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
@@ -274,6 +516,7 @@ class _SessionHistoryStrip extends StatefulWidget {
   final void Function(String?) onDaySelected;
   final void Function(WorkoutSession) onSessionTap;
   final void Function(WorkoutSession session, int setNumber) onAskFollowUp;
+  final VoidCallback onRefreshTrend;
 
   const _SessionHistoryStrip({
     super.key,
@@ -284,6 +527,7 @@ class _SessionHistoryStrip extends StatefulWidget {
     required this.onDaySelected,
     required this.onSessionTap,
     required this.onAskFollowUp,
+    required this.onRefreshTrend,
   });
 
   @override
@@ -342,7 +586,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
     final today = DateTime(now.year, now.month, now.day);
     final Map<String, List<WorkoutSession>> groups = {};
     for (final s in sessions) {
-      final d    = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final d    = DateTime(
+          s.timestamp.year, s.timestamp.month, s.timestamp.day);
       final diff = today.difference(d).inDays;
       final String label;
       if (diff == 0) {
@@ -351,9 +596,12 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
         label = 'Yesterday';
       } else {
         const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const months   = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        label = '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
+        const months   = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        label =
+            '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
       }
       groups.putIfAbsent(label, () => []).add(s);
     }
@@ -377,7 +625,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
   int _setNumberFor(WorkoutSession target, List<WorkoutSession> daySessions) {
     int setNum = 0;
-    // Iterate from oldest to newest to assign chronological set numbers
     for (int i = daySessions.length - 1; i >= 0; i--) {
       if (daySessions[i].exercise == target.exercise) {
         setNum++;
@@ -397,7 +644,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
         final groups = _groupByDay(sessions);
 
-        if (widget.selectedDay != null && !groups.containsKey(widget.selectedDay)) {
+        if (widget.selectedDay != null &&
+            !groups.containsKey(widget.selectedDay)) {
           widget.onDaySelected(null);
         }
 
@@ -443,7 +691,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
             // ── Strip ────────────────────────────────────────────────────
             SizedBox(
-              height: 100, // Increased height to prevent layout overflows
+              height: 100,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 child: widget.selectedDay == null
@@ -452,10 +700,11 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                     ? ListView(
                         key: const ValueKey('dates'),
                         scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         children: groups.entries.map((entry) {
-                          final label       = entry.key;
-                          final daySess     = entry.value;
+                          final label   = entry.key;
+                          final daySess = entry.value;
                           return GestureDetector(
                             onTap: () => widget.onDaySelected(label),
                             child: AnimatedContainer(
@@ -467,24 +716,29 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 color: const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: const Color(0xFFFF5E00).withOpacity(0.5),
+                                  color: const Color(0xFFFF5E00)
+                                      .withOpacity(0.5),
                                   width: 1.2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFFF5E00).withOpacity(0.08),
+                                    color: const Color(0xFFFF5E00)
+                                        .withOpacity(0.08),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
                                   ),
                                 ],
                               ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(Icons.calendar_today_rounded,
-                                          color: Color(0xFFFF5E00), size: 13),
+                                      const Icon(
+                                          Icons.calendar_today_rounded,
+                                          color: Color(0xFFFF5E00),
+                                          size: 13),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
@@ -503,7 +757,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     '${daySess.length} session${daySess.length == 1 ? '' : 's'}',
                                     style: const TextStyle(
-                                        color: Colors.white54, fontSize: 11),
+                                        color: Colors.white54,
+                                        fontSize: 11),
                                   ),
                                   const Spacer(),
                                   Row(
@@ -511,13 +766,15 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                       Text(
                                         'Tap to view',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.3),
+                                          color: Colors.white
+                                              .withOpacity(0.3),
                                           fontSize: 10,
                                         ),
                                       ),
                                       const SizedBox(width: 2),
                                       Icon(Icons.chevron_right,
-                                          color: Colors.white.withOpacity(0.3),
+                                          color: Colors.white
+                                              .withOpacity(0.3),
                                           size: 12),
                                     ],
                                   ),
@@ -533,15 +790,24 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         key: ValueKey(widget.selectedDay),
                         controller: widget.stripScrollController,
                         scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: daySessions.length,
                         itemBuilder: (context, index) {
                           final session = daySessions[index];
-                          final isExpanded = widget.expandedSession?.id == session.id;
-                          final setNum = _setNumberFor(session, daySessions);
+                          final isExpanded =
+                              widget.expandedSession?.id == session.id;
+                          final setNum =
+                              _setNumberFor(session, daySessions);
 
                           return GestureDetector(
-                            onTap: () => widget.onSessionTap(session),
+                            onTap: () {
+                              widget.onSessionTap(session);
+                              // Refresh the chart when the user opens a
+                              // session — covers the case where a new
+                              // session was saved just before viewing
+                              widget.onRefreshTrend();
+                            },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               margin: const EdgeInsets.only(right: 10),
@@ -549,7 +815,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isExpanded
-                                    ? const Color(0xFFFF5E00).withOpacity(0.15)
+                                    ? const Color(0xFFFF5E00)
+                                        .withOpacity(0.15)
                                     : const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
@@ -560,7 +827,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 ),
                               ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
@@ -585,7 +853,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     'Set $setNum',
                                     style: TextStyle(
-                                      color: const Color(0xFFFF5E00).withOpacity(0.85),
+                                      color: const Color(0xFFFF5E00)
+                                          .withOpacity(0.85),
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 0.3,
@@ -595,7 +864,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     '${session.reps} reps · ${session.durationFormatted}',
                                     style: const TextStyle(
-                                        color: Colors.white54, fontSize: 11),
+                                        color: Colors.white54,
+                                        fontSize: 11),
                                   ),
                                   const Spacer(),
                                   Text(
@@ -614,7 +884,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Expanded debrief panel — fills all remaining space ───────
+            // ── Expanded debrief panel ────────────────────────────────────
             if (widget.expandedSession != null)
               Expanded(
                 child: SingleChildScrollView(
@@ -627,13 +897,13 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                          color:
+                              const Color(0xFFFF5E00).withOpacity(0.4)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
 
-                        // Header row
                         Row(
                           children: [
                             const Icon(Icons.record_voice_over,
@@ -649,7 +919,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 ),
                               ),
                             ),
-                            // TTS play/stop button
                             GestureDetector(
                               onTap: () => _toggleSpeaking(
                                   widget.expandedSession!.debriefText),
@@ -659,10 +928,12 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 decoration: BoxDecoration(
                                   color: _isSpeaking
                                       ? const Color(0xFFFF5E00)
-                                      : const Color(0xFFFF5E00).withOpacity(0.15),
+                                      : const Color(0xFFFF5E00)
+                                          .withOpacity(0.15),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: const Color(0xFFFF5E00).withOpacity(0.6),
+                                    color: const Color(0xFFFF5E00)
+                                        .withOpacity(0.6),
                                   ),
                                 ),
                                 child: Icon(
@@ -681,7 +952,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                         const SizedBox(height: 10),
 
-                        // Debrief text
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -701,20 +971,23 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                         const SizedBox(height: 12),
 
-                        // Ask follow-up button
                         GestureDetector(
                           onTap: () {
-                            final setNum = _setNumberFor(widget.expandedSession!, daySessions);
-                            widget.onAskFollowUp(widget.expandedSession!, setNum);
+                            final setNum = _setNumberFor(
+                                widget.expandedSession!, daySessions);
+                            widget.onAskFollowUp(
+                                widget.expandedSession!, setNum);
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                              color: const Color(0xFFB9FF2B)
+                                  .withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                  color: const Color(0xFFB9FF2B).withOpacity(0.4)),
+                                  color: const Color(0xFFB9FF2B)
+                                      .withOpacity(0.4)),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
@@ -887,10 +1160,12 @@ class _CardDeckState extends State<_CardDeck> {
           icon: const Icon(Icons.refresh, color: Color(0xFFFF5E00)),
           label: const Text('Review Cards Again',
               style: TextStyle(
-                  color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)),
+                  color: Color(0xFFFF5E00),
+                  fontWeight: FontWeight.bold)),
           style: TextButton.styleFrom(
             backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
           ),
@@ -917,13 +1192,16 @@ class _CardDeckState extends State<_CardDeck> {
           if (index == 0) {
             inner = Dismissible(
               key: UniqueKey(),
-              onDismissed: (_) => setState(() => _currentCards.removeAt(0)),
+              onDismissed: (_) =>
+                  setState(() => _currentCards.removeAt(0)),
               child: inner,
             );
           }
           return Positioned(
-            top: offset, bottom: 0,
-            left: index * 8.0, right: index * 8.0,
+            top: offset,
+            bottom: 0,
+            left: index * 8.0,
+            right: index * 8.0,
             child: inner,
           );
         }).toList().reversed.toList(),
