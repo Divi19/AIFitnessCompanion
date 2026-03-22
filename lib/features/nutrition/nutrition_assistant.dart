@@ -7,6 +7,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/rag_service.dart';
 import '../../services/workout_session_service.dart';
 
+// ── Per-exercise colour palette ───────────────────────────────────────────
+// Stays within the app's orange/green contrast palette.
+// Indexed by exercise key.
+const Map<String, Color> _exerciseColours = {
+  'squat':        Color(0xFFFF5E00), // orange
+  'pushup':       Color(0xFFB9FF2B), // volt green
+  'bicep_curl':   Color(0xFFFFB800), // amber
+  'jumping_jack': Color(0xFF00E5FF), // cyan
+  'lunge_left':   Color(0xFFFF2B6B), // pink-red
+  'lunge_right':  Color(0xFFFF2B6B), // same as lunge_left
+  'sit_up':       Color(0xFF9B59FF), // purple
+  'plank':        Color(0xFF00FF9B), // mint green
+  'glute_bridge': Color(0xFFFFE600), // yellow
+};
+
+Color _colourFor(String exercise) =>
+    _exerciseColours[exercise] ?? const Color(0xFFFF5E00);
+
 class NutritionAssistantScreen extends StatefulWidget {
   const NutritionAssistantScreen({super.key});
 
@@ -16,11 +34,10 @@ class NutritionAssistantScreen extends StatefulWidget {
 }
 
 class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
-  final _ragService       = RagService();
-  final _sessionService   = WorkoutSessionService();
-  final _controller       = TextEditingController();
-  final _scrollController = ScrollController();
-
+  final _ragService            = RagService();
+  final _sessionService        = WorkoutSessionService();
+  final _controller            = TextEditingController();
+  final _scrollController      = ScrollController();
   final _stripScrollController = ScrollController();
   final GlobalKey _stripKey    = GlobalKey();
 
@@ -29,20 +46,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
 
   WorkoutSession? _expandedSession;
   String?         _selectedDay;
-
-  // Weekly trend — loaded once on init and refreshed after each new session
-  List<FormTrendPoint> _trendPoints = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTrend();
-  }
-
-  Future<void> _loadTrend() async {
-    final points = await _sessionService.getWeeklyTrend();
-    if (mounted) setState(() => _trendPoints = points);
-  }
 
   // ── Send message ─────────────────────────────────────────────────────────
   Future<void> _sendMessage({String? overrideText, String? displayText}) async {
@@ -126,6 +129,22 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     });
   }
 
+  // ── Open exercise picker → chart flow ────────────────────────────────────
+  Future<void> _openTrendFlow() async {
+    final exercises = await _sessionService.getExercisesWithSessions();
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ExercisePickerSheet(
+        exercises:      exercises,
+        sessionService: _sessionService,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -136,12 +155,13 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
 
   Widget _buildStrip() {
     return _SessionHistoryStrip(
-      key: _stripKey,
+      key:                   _stripKey,
       sessionService:        _sessionService,
       expandedSession:       _expandedSession,
       selectedDay:           _selectedDay,
       stripScrollController: _stripScrollController,
-      onDaySelected: (day) => setState(() => _selectedDay = day),
+      onDaySelected:         (day) => setState(() => _selectedDay = day),
+      onTrendTap:            _openTrendFlow,
       onSessionTap: (session) {
         setState(() {
           _expandedSession =
@@ -160,9 +180,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
               'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
         );
       },
-      // Refresh the trend chart whenever a session card is tapped
-      // (covers the case where a new session was just saved)
-      onRefreshTrend: _loadTrend,
     );
   }
 
@@ -190,20 +207,11 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
       ),
       body: Column(
         children: [
-
-          // ── Weekly form trend chart ──────────────────────────────────────
-          // Only shown when the debrief panel is not open and there is
-          // at least 2 days of data to draw a meaningful line.
-          if (_expandedSession == null && _trendPoints.length >= 2)
-            _WeeklyTrendChart(points: _trendPoints),
-
-          // ── Session History Strip ────────────────────────────────────────
           if (_expandedSession != null)
             Expanded(child: _buildStrip())
           else
             _buildStrip(),
 
-          // ── Chat Messages ────────────────────────────────────────────────
           if (_expandedSession == null)
             Expanded(
               child: _messages.isEmpty
@@ -244,7 +252,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
                     ),
             ),
 
-          // ── Input bar ────────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -288,29 +295,207 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   }
 }
 
-// ── Weekly Form Trend Chart ───────────────────────────────────────────────
-// A compact line chart showing form quality score (0–100) per day over
-// the last 7 days. Uses fl_chart's LineChart widget.
-// Matches the app's dark/orange/green colour palette exactly.
-class _WeeklyTrendChart extends StatelessWidget {
-  final List<FormTrendPoint> points;
+// ── Exercise Picker Bottom Sheet ─────────────────────────────────────────
+class _ExercisePickerSheet extends StatelessWidget {
+  final List<String> exercises;
+  final WorkoutSessionService sessionService;
 
-  const _WeeklyTrendChart({required this.points});
+  const _ExercisePickerSheet({
+    required this.exercises,
+    required this.sessionService,
+  });
 
-  // Computes the trend direction label shown in the header pill
-  String _trendLabel() {
-    if (points.length < 2) return '';
-    final first = points.first.avgScore;
-    final last  = points.last.avgScore;
-    final delta = last - first;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          const Text(
+            'SELECT EXERCISE',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'View your form trend per set',
+            style: TextStyle(color: Colors.white54, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+
+          if (exercises.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white38, size: 18),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No sessions recorded yet. Complete a workout to see your form trends here.',
+                      style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: exercises.length,
+                itemBuilder: (context, index) {
+                  final ex    = exercises[index];
+                  final colour = _colourFor(ex);
+                  final name  = _displayName(ex);
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        isScrollControlled: true,
+                        builder: (_) => _SetTrendSheet(
+                          exercise:       ex,
+                          exerciseName:   name,
+                          colour:         colour,
+                          sessionService: sessionService,
+                        ),
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: colour.withOpacity(0.35), width: 1.2),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: colour,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(Icons.chevron_right,
+                              color: colour.withOpacity(0.6), size: 20),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _displayName(String exercise) {
+    const names = {
+      'squat':        'Squat',
+      'pushup':       'Push Up',
+      'bicep_curl':   'Bicep Curl',
+      'jumping_jack': 'Jumping Jack',
+      'lunge_left':   'Left Lunge',
+      'lunge_right':  'Right Lunge',
+      'sit_up':       'Sit Up',
+      'plank':        'Plank',
+      'glute_bridge': 'Glute Bridge',
+    };
+    return names[exercise] ?? exercise;
+  }
+}
+
+// ── Per-set trend chart bottom sheet ─────────────────────────────────────
+class _SetTrendSheet extends StatefulWidget {
+  final String exercise;
+  final String exerciseName;
+  final Color colour;
+  final WorkoutSessionService sessionService;
+
+  const _SetTrendSheet({
+    required this.exercise,
+    required this.exerciseName,
+    required this.colour,
+    required this.sessionService,
+  });
+
+  @override
+  State<_SetTrendSheet> createState() => _SetTrendSheetState();
+}
+
+class _SetTrendSheetState extends State<_SetTrendSheet> {
+  List<SetTrendPoint>? _points;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final pts =
+        await widget.sessionService.getSetTrendForExercise(widget.exercise);
+    if (mounted) setState(() { _points = pts; _loading = false; });
+  }
+
+  String _trendLabel(List<SetTrendPoint> pts) {
+    if (pts.length < 2) return '';
+    final delta = pts.last.score - pts.first.score;
     if (delta >= 5)  return '↑ Improving';
     if (delta <= -5) return '↓ Declining';
     return '→ Steady';
   }
 
-  Color _trendColour() {
-    if (points.length < 2) return Colors.white54;
-    final delta = points.last.avgScore - points.first.avgScore;
+  Color _trendColour(List<SetTrendPoint> pts) {
+    if (pts.length < 2) return Colors.white54;
+    final delta = pts.last.score - pts.first.score;
     if (delta >= 5)  return const Color(0xFFB9FF2B);
     if (delta <= -5) return const Color(0xFFFF5E00);
     return Colors.white54;
@@ -318,191 +503,350 @@ class _WeeklyTrendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Build fl_chart spots — x = index, y = avgScore
-    final spots = points.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), e.value.avgScore);
-    }).toList();
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-
-          // Header row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'WEEKLY FORM TREND',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 3),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.72,
+      minChildSize:     0.5,
+      maxChildSize:     0.92,
+      builder: (_, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF111111),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: _trendColour().withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border:
-                      Border.all(color: _trendColour().withOpacity(0.4)),
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                child: Text(
-                  _trendLabel(),
-                  style: TextStyle(
-                    color: _trendColour(),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          // Chart
-          SizedBox(
-            height: 110,
-            child: LineChart(
-              LineChartData(
-                minY: 0,
-                maxY: 100,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 25,
-                  getDrawingHorizontalLine: (_) => FlLine(
-                    color: Colors.white.withOpacity(0.05),
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      interval: 50,
-                      getTitlesWidget: (value, _) => Text(
-                        '${value.toInt()}',
-                        style: const TextStyle(
-                            color: Colors.white24, fontSize: 9),
-                      ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      getTitlesWidget: (value, _) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= points.length) {
-                          return const SizedBox.shrink();
-                        }
-                        final isToday =
-                            points[idx].dayLabel == 'Today';
-                        return Text(
-                          points[idx].dayLabel,
-                          style: TextStyle(
-                            color: isToday
-                                ? const Color(0xFFB9FF2B)
-                                : Colors.white38,
-                            fontSize: 9,
-                            fontWeight: isToday
-                                ? FontWeight.w800
-                                : FontWeight.w400,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => const Color(0xFF2A2A2A),
-                    getTooltipItems: (spots) => spots
-                        .map((s) => LineTooltipItem(
-                              '${s.y.toInt()}%',
-                              const TextStyle(
-                                color: Color(0xFFFF5E00),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                ),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    curveSmoothness: 0.35,
-                    color: const Color(0xFFFF5E00),
-                    barWidth: 2.5,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, _, __, ___) {
-                        final isToday = points[spot.x.toInt()].dayLabel ==
-                            'Today';
-                        return FlDotCirclePainter(
-                          radius: isToday ? 5 : 3,
-                          color: isToday
-                              ? const Color(0xFFB9FF2B)
-                              : const Color(0xFFFF5E00),
-                          strokeWidth: isToday ? 2 : 0,
-                          strokeColor: const Color(0xFF0D0D0D),
-                        );
-                      },
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFFFF5E00).withOpacity(0.18),
-                          const Color(0xFFFF5E00).withOpacity(0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
+
+            // Header
+            Row(
+              children: [
+                Container(
+                  width: 12, height: 12,
+                  decoration: BoxDecoration(
+                    color: widget.colour,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  widget.exerciseName.toUpperCase(),
+                  style: TextStyle(
+                    color: widget.colour,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                if (_points != null && _points!.length >= 2)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _trendColour(_points!).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: _trendColour(_points!).withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      _trendLabel(_points!),
+                      style: TextStyle(
+                        color: _trendColour(_points!),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Form score per set — all time',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            const SizedBox(height: 20),
+
+            // Chart / loading / empty states
+            if (_loading)
+              const SizedBox(
+                height: 180,
+                child: Center(
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFFFF5E00)),
+                ),
+              )
+            else if (_points == null || _points!.isEmpty)
+              Container(
+                height: 100,
+                alignment: Alignment.center,
+                child: const Text(
+                  'No sets recorded yet.',
+                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                ),
+              )
+            else
+              _buildChart(_points!),
+
+            const SizedBox(height: 20),
+
+            // Session legend — one chip per distinct sessionIndex
+            if (_points != null && _points!.isNotEmpty)
+              _buildSessionLegend(_points!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChart(List<SetTrendPoint> pts) {
+    final spots = pts.asMap().entries.map((e) {
+      return FlSpot(e.key.toDouble(), e.value.score);
+    }).toList();
+
+    final bestScore = pts.map((p) => p.score).reduce((a, b) => a > b ? a : b);
+
+    // Unique session indices for colour banding vertical lines
+    final sessionStarts = <int>[];
+    for (int i = 0; i < pts.length; i++) {
+      if (i == 0 || pts[i].sessionIndex != pts[i - 1].sessionIndex) {
+        if (i > 0) sessionStarts.add(i);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 180,
+          child: LineChart(
+            LineChartData(
+              minY: 0,
+              maxY: 100,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: 25,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: Colors.white.withOpacity(0.05),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              extraLinesData: ExtraLinesData(
+                // Thin dashed vertical lines at session boundaries
+                verticalLines: sessionStarts.map((i) {
+                  return VerticalLine(
+                    x: i.toDouble(),
+                    color: Colors.white.withOpacity(0.15),
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                    label: VerticalLineLabel(
+                      show: true,
+                      alignment: Alignment.topRight,
+                      style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w600),
+                      labelResolver: (_) => 'New session',
+                    ),
+                  );
+                }).toList(),
+              ),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    interval: 50,
+                    getTitlesWidget: (value, _) => Text(
+                      '${value.toInt()}',
+                      style: const TextStyle(
+                          color: Colors.white24, fontSize: 9),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 22,
+                    getTitlesWidget: (value, meta) {
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= pts.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final label       = pts[idx].xLabel;
+                      final isNewSess   = label.startsWith('●');
+                      final displayText = isNewSess
+                          ? label.substring(1) // strip bullet for axis text
+                          : label;
+                      return Text(
+                        displayText,
+                        style: TextStyle(
+                          color: isNewSess
+                              ? widget.colour
+                              : Colors.white38,
+                          fontSize: 9,
+                          fontWeight: isNewSess
+                              ? FontWeight.w800
+                              : FontWeight.w400,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => const Color(0xFF2A2A2A),
+                  getTooltipItems: (touchedSpots) =>
+                      touchedSpots.map((s) {
+                        final idx = s.x.toInt();
+                        final pt  = pts[idx];
+                        return LineTooltipItem(
+                          'Set ${pt.setNumber}  ${pt.score.toInt()}%',
+                          TextStyle(
+                            color: widget.colour,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList(),
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  curveSmoothness: 0.3,
+                  color: widget.colour,
+                  barWidth: 2.5,
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (spot, _, __, ___) {
+                      final idx       = spot.x.toInt();
+                      final isNewSess = pts[idx].xLabel.startsWith('●');
+                      return FlDotCirclePainter(
+                        radius:      isNewSess ? 6 : 4,
+                        color:       widget.colour,
+                        strokeWidth: isNewSess ? 2.5 : 0,
+                        strokeColor: const Color(0xFF111111),
+                      );
+                    },
+                  ),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end:   Alignment.bottomCenter,
+                      colors: [
+                        widget.colour.withOpacity(0.18),
+                        widget.colour.withOpacity(0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
 
-          const SizedBox(height: 6),
+        const SizedBox(height: 10),
 
-          // Footer: best score this week
-          Builder(builder: (_) {
-            final best = points
-                .map((p) => p.avgScore)
-                .reduce((a, b) => a > b ? a : b);
-            return Text(
-              'Best this week: ${best.toInt()}% form score',
-              style: const TextStyle(
-                color: Colors.white38,
-                fontSize: 10,
+        // Best score footer — coloured to match the exercise line
+        Text(
+          'Best set: ${bestScore.toInt()}% form score',
+          style: TextStyle(
+            color: widget.colour,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSessionLegend(List<SetTrendPoint> pts) {
+    // Collect distinct session groups with their date
+    final Map<int, DateTime> groups = {};
+    for (final pt in pts) {
+      groups.putIfAbsent(pt.sessionIndex, () => pt.timestamp);
+    }
+
+    if (groups.length <= 1) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(color: Colors.white10, height: 24),
+        const Text(
+          'SESSIONS',
+          style: TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: groups.entries.map((entry) {
+            final idx  = entry.key;
+            final date = entry.value;
+            final now  = DateTime.now();
+            final day  = DateTime(date.year, date.month, date.day);
+            final today = DateTime(now.year, now.month, now.day);
+            final diff  = today.difference(day).inDays;
+
+            final String dateLabel;
+            if (diff == 0) {
+              dateLabel = 'Today';
+            } else if (diff == 1) {
+              dateLabel = 'Yesterday';
+            } else {
+              const months = [
+                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+              ];
+              dateLabel = '${day.day} ${months[day.month - 1]}';
+            }
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: widget.colour.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: widget.colour.withOpacity(0.3)),
+              ),
+              child: Text(
+                'Session ${idx + 1} · $dateLabel',
+                style: TextStyle(
+                  color: widget.colour.withOpacity(0.9),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             );
-          }),
-        ],
-      ),
+          }).toList(),
+        ),
+      ],
     );
   }
 }
@@ -516,7 +860,7 @@ class _SessionHistoryStrip extends StatefulWidget {
   final void Function(String?) onDaySelected;
   final void Function(WorkoutSession) onSessionTap;
   final void Function(WorkoutSession session, int setNumber) onAskFollowUp;
-  final VoidCallback onRefreshTrend;
+  final VoidCallback onTrendTap;
 
   const _SessionHistoryStrip({
     super.key,
@@ -527,7 +871,7 @@ class _SessionHistoryStrip extends StatefulWidget {
     required this.onDaySelected,
     required this.onSessionTap,
     required this.onAskFollowUp,
-    required this.onRefreshTrend,
+    required this.onTrendTap,
   });
 
   @override
@@ -586,8 +930,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
     final today = DateTime(now.year, now.month, now.day);
     final Map<String, List<WorkoutSession>> groups = {};
     for (final s in sessions) {
-      final d    = DateTime(
-          s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final d    = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
       final diff = today.difference(d).inDays;
       final String label;
       if (diff == 0) {
@@ -600,8 +943,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
           'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
         ];
-        label =
-            '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
+        label = '${weekdays[d.weekday - 1]} ${d.day} ${months[d.month - 1]}';
       }
       groups.putIfAbsent(label, () => []).add(s);
     }
@@ -656,9 +998,9 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
           mainAxisSize: MainAxisSize.max,
           children: [
 
-            // ── Header ───────────────────────────────────────────────────
+            // ── Header with trend chart button ────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
               child: Row(
                 children: [
                   if (widget.selectedDay != null) ...[
@@ -685,6 +1027,37 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       letterSpacing: 1.5,
                     ),
                   ),
+                  const Spacer(),
+                  // ── Trend chart button ────────────────────────────────
+                  GestureDetector(
+                    onTap: widget.onTrendTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF5E00).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.show_chart_rounded,
+                              color: Color(0xFFFF5E00), size: 14),
+                          SizedBox(width: 5),
+                          Text(
+                            'Trend',
+                            style: TextStyle(
+                              color: Color(0xFFFF5E00),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -700,8 +1073,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                     ? ListView(
                         key: const ValueKey('dates'),
                         scrollDirection: Axis.horizontal,
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: groups.entries.map((entry) {
                           final label   = entry.key;
                           final daySess = entry.value;
@@ -730,8 +1102,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 ],
                               ),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
@@ -757,8 +1128,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     '${daySess.length} session${daySess.length == 1 ? '' : 's'}',
                                     style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11),
+                                        color: Colors.white54, fontSize: 11),
                                   ),
                                   const Spacer(),
                                   Row(
@@ -766,15 +1136,14 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                       Text(
                                         'Tap to view',
                                         style: TextStyle(
-                                          color: Colors.white
-                                              .withOpacity(0.3),
+                                          color: Colors.white.withOpacity(0.3),
                                           fontSize: 10,
                                         ),
                                       ),
                                       const SizedBox(width: 2),
                                       Icon(Icons.chevron_right,
-                                          color: Colors.white
-                                              .withOpacity(0.3),
+                                          color:
+                                              Colors.white.withOpacity(0.3),
                                           size: 12),
                                     ],
                                   ),
@@ -790,8 +1159,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         key: ValueKey(widget.selectedDay),
                         controller: widget.stripScrollController,
                         scrollDirection: Axis.horizontal,
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: daySessions.length,
                         itemBuilder: (context, index) {
                           final session = daySessions[index];
@@ -801,13 +1169,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               _setNumberFor(session, daySessions);
 
                           return GestureDetector(
-                            onTap: () {
-                              widget.onSessionTap(session);
-                              // Refresh the chart when the user opens a
-                              // session — covers the case where a new
-                              // session was saved just before viewing
-                              widget.onRefreshTrend();
-                            },
+                            onTap: () => widget.onSessionTap(session),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               margin: const EdgeInsets.only(right: 10),
@@ -815,8 +1177,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isExpanded
-                                    ? const Color(0xFFFF5E00)
-                                        .withOpacity(0.15)
+                                    ? const Color(0xFFFF5E00).withOpacity(0.15)
                                     : const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
@@ -827,8 +1188,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 ),
                               ),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
@@ -864,8 +1224,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     '${session.reps} reps · ${session.durationFormatted}',
                                     style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11),
+                                        color: Colors.white54, fontSize: 11),
                                   ),
                                   const Spacer(),
                                   Text(
@@ -897,13 +1256,11 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color:
-                              const Color(0xFFFF5E00).withOpacity(0.4)),
+                          color: const Color(0xFFFF5E00).withOpacity(0.4)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-
                         Row(
                           children: [
                             const Icon(Icons.record_voice_over,
@@ -982,8 +1339,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFB9FF2B)
-                                  .withOpacity(0.1),
+                              color: const Color(0xFFB9FF2B).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                   color: const Color(0xFFB9FF2B)
@@ -1160,8 +1516,7 @@ class _CardDeckState extends State<_CardDeck> {
           icon: const Icon(Icons.refresh, color: Color(0xFFFF5E00)),
           label: const Text('Review Cards Again',
               style: TextStyle(
-                  color: Color(0xFFFF5E00),
-                  fontWeight: FontWeight.bold)),
+                  color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)),
           style: TextButton.styleFrom(
             backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
             padding:
@@ -1198,10 +1553,8 @@ class _CardDeckState extends State<_CardDeck> {
             );
           }
           return Positioned(
-            top: offset,
-            bottom: 0,
-            left: index * 8.0,
-            right: index * 8.0,
+            top: offset, bottom: 0,
+            left: index * 8.0, right: index * 8.0,
             child: inner,
           );
         }).toList().reversed.toList(),
