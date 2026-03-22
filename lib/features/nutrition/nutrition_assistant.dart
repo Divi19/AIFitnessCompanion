@@ -20,6 +20,9 @@ class _NutritionAssistantScreenState
   final _sessionService   = WorkoutSessionService();
   final _controller       = TextEditingController();
   final _scrollController = ScrollController();
+  
+  // Lifted here to preserve horizontal scroll position across Expanded rebuilds
+  final _stripScrollController = ScrollController();
 
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
@@ -30,14 +33,15 @@ class _NutritionAssistantScreenState
   // reset whenever the widget tree changed (e.g. Expanded added/removed).
   String? _selectedDay;
 
-  Future<void> _sendMessage({String? overrideText}) async {
+  Future<void> _sendMessage({String? overrideText, String? displayText}) async {
     final question = overrideText ?? _controller.text.trim();
     if (question.isEmpty || _isLoading) return;
 
     final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final chatText = displayText ?? question;
 
     setState(() {
-      _messages.add({'role': 'user', 'text': question, 'isStreaming': false});
+      _messages.add({'role': 'user', 'text': chatText, 'isStreaming': false});
       _isLoading = true;
     });
 
@@ -113,6 +117,7 @@ class _NutritionAssistantScreenState
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _stripScrollController.dispose();
     super.dispose();
   }
 
@@ -145,46 +150,54 @@ class _NutritionAssistantScreenState
           if (_expandedSession != null)
             Expanded(
               child: _SessionHistoryStrip(
-                sessionService:  _sessionService,
-                expandedSession: _expandedSession,
-                selectedDay:     _selectedDay,
-                onDaySelected:   (day) => setState(() => _selectedDay = day),
+                sessionService:        _sessionService,
+                expandedSession:       _expandedSession,
+                selectedDay:           _selectedDay,
+                stripScrollController: _stripScrollController,
+                onDaySelected:         (day) => setState(() => _selectedDay = day),
                 onSessionTap: (session) {
                   setState(() {
                     _expandedSession =
                         _expandedSession?.id == session.id ? null : session;
                   });
                 },
-                onAskFollowUp: (session) {
+                onAskFollowUp: (session, setNumber) {
                   setState(() => _expandedSession = null);
                   _sendMessage(
                     overrideText:
                         'Based on my ${session.exerciseDisplayName} session where I did '
                         '${session.reps} reps, ${session.debriefText} '
                         'What should I focus on to improve next time?',
+                    displayText:
+                        'How can I improve my ${session.exerciseDisplayName} — '
+                        'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
                   );
                 },
               ),
             )
           else
           _SessionHistoryStrip(
-            sessionService:  _sessionService,
-            expandedSession: _expandedSession,
-            selectedDay:     _selectedDay,
-            onDaySelected:   (day) => setState(() => _selectedDay = day),
+            sessionService:        _sessionService,
+            expandedSession:       _expandedSession,
+            selectedDay:           _selectedDay,
+            stripScrollController: _stripScrollController,
+            onDaySelected:         (day) => setState(() => _selectedDay = day),
             onSessionTap: (session) {
               setState(() {
                 _expandedSession =
                     _expandedSession?.id == session.id ? null : session;
               });
             },
-            onAskFollowUp: (session) {
+            onAskFollowUp: (session, setNumber) {
               setState(() => _expandedSession = null);
               _sendMessage(
                 overrideText:
                     'Based on my ${session.exerciseDisplayName} session where I did '
                     '${session.reps} reps, ${session.debriefText} '
                     'What should I focus on to improve next time?',
+                displayText:
+                    'How can I improve my ${session.exerciseDisplayName} — '
+                    'Set $setNumber, ${session.reps} reps (${session.timeAgo})?',
               );
             },
           ),
@@ -281,14 +294,16 @@ class _SessionHistoryStrip extends StatefulWidget {
   final WorkoutSessionService sessionService;
   final WorkoutSession? expandedSession;
   final String? selectedDay;
+  final ScrollController stripScrollController;
   final void Function(String?) onDaySelected;
   final void Function(WorkoutSession) onSessionTap;
-  final void Function(WorkoutSession) onAskFollowUp;
+  final void Function(WorkoutSession session, int setNumber) onAskFollowUp;
 
   const _SessionHistoryStrip({
     required this.sessionService,
     required this.expandedSession,
     required this.selectedDay,
+    required this.stripScrollController,
     required this.onDaySelected,
     required this.onSessionTap,
     required this.onAskFollowUp,
@@ -301,8 +316,8 @@ class _SessionHistoryStrip extends StatefulWidget {
 class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
-  // _selectedDay is now owned by the parent screen so it survives
-  // widget tree restructuring (Expanded wrapping/unwrapping)
+  // _selectedDay and stripScrollController are now owned by the parent screen 
+  // so they survive widget tree restructuring (Expanded wrapping/unwrapping)
 
   @override
   void initState() {
@@ -385,6 +400,18 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
     }
   }
 
+  int _setNumberFor(WorkoutSession target, List<WorkoutSession> daySessions) {
+    int setNum = 0;
+    // Iterate from oldest to newest to assign chronological set numbers
+    for (int i = daySessions.length - 1; i >= 0; i--) {
+      if (daySessions[i].exercise == target.exercise) {
+        setNum++;
+        if (daySessions[i].id == target.id) return setNum;
+      }
+    }
+    return 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<WorkoutSession>>(
@@ -398,6 +425,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
         if (widget.selectedDay != null && !groups.containsKey(widget.selectedDay)) {
           widget.onDaySelected(null);
         }
+
+        final daySessions = groups[widget.selectedDay] ?? [];
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,7 +480,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: groups.entries.map((entry) {
                           final label       = entry.key;
-                          final daySessions = entry.value;
+                          final daySess     = entry.value;
                           return GestureDetector(
                             onTap: () => widget.onDaySelected(label),
                             child: AnimatedContainer(
@@ -497,7 +526,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '${daySessions.length} session${daySessions.length == 1 ? '' : 's'}',
+                                    '${daySess.length} session${daySess.length == 1 ? '' : 's'}',
                                     style: const TextStyle(
                                         color: Colors.white54, fontSize: 11),
                                   ),
@@ -524,14 +553,18 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         }).toList(),
                       )
 
-                    // SESSION CARDS — identical style to original
-                    : ListView(
+                    // SESSION CARDS
+                    : ListView.builder(
                         key: ValueKey(widget.selectedDay),
+                        controller: widget.stripScrollController,
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: (groups[widget.selectedDay] ?? []).map((session) {
-                          final isExpanded =
-                              widget.expandedSession?.id == session.id;
+                        itemCount: daySessions.length,
+                        itemBuilder: (context, index) {
+                          final session = daySessions[index];
+                          final isExpanded = widget.expandedSession?.id == session.id;
+                          final setNum = _setNumberFor(session, daySessions);
+
                           return GestureDetector(
                             onTap: () => widget.onSessionTap(session),
                             child: AnimatedContainer(
@@ -573,7 +606,17 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Set $setNum',
+                                    style: TextStyle(
+                                      color: const Color(0xFFFF5E00).withOpacity(0.85),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
                                   Text(
                                     '${session.reps} reps · ${session.durationFormatted}',
                                     style: const TextStyle(
@@ -591,7 +634,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               ),
                             ),
                           );
-                        }).toList(),
+                        },
                       ),
               ),
             ),
@@ -687,8 +730,10 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
 
                     // Ask follow-up button
                     GestureDetector(
-                      onTap: () =>
-                          widget.onAskFollowUp(widget.expandedSession!),
+                      onTap: () {
+                        final setNum = _setNumberFor(widget.expandedSession!, daySessions);
+                        widget.onAskFollowUp(widget.expandedSession!, setNum);
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 8),
