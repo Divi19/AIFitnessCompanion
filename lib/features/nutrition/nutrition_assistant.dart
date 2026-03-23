@@ -568,7 +568,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             const SizedBox(height: 6),
             const Text(
               'Form score per set — all time',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 20),
 
@@ -622,37 +622,15 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       if (pts[i].isSessionStart) sessionStartIndices.add(i);
     }
 
-    // Alternate background bands per session group using VerticalRangeAnnotation
-    // Even sessions: very subtle tint; odd sessions: slightly different tint
-    final bands = <VerticalRangeAnnotation>[];
-    if (pts.isNotEmpty) {
-      final boundaries = [0, ...sessionStartIndices, pts.length];
-      for (int b = 0; b < boundaries.length - 1; b++) {
-        final start = boundaries[b].toDouble();
-        final end   = (boundaries[b + 1] - 1).toDouble();
-        if (end < start) continue;
-        final isEven = b % 2 == 0;
-        bands.add(VerticalRangeAnnotation(
-          x1: start - 0.4,
-          x2: end   + 0.4,
-          color: isEven
-              ? widget.colour.withOpacity(0.04)
-              : Colors.white.withOpacity(0.03),
-        ));
-      }
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Reverted to original 180 height
         SizedBox(
           height: 180,
           child: LineChart(
             LineChartData(
               minY: 0,
               maxY: 100,
-              // No minX/maxX padding — this was causing ghost labels at edges
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
@@ -662,9 +640,13 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   strokeWidth: 1,
                 ),
               ),
-              borderData: FlBorderData(show: false),
-              rangeAnnotations: RangeAnnotations(
-                verticalRangeAnnotations: bands,
+              // Show x and y axis lines
+              borderData: FlBorderData(
+                show: true,
+                border: Border(
+                  bottom: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+                  left:   BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+                ),
               ),
               extraLinesData: ExtraLinesData(
                 verticalLines: sessionStartIndices.map((i) {
@@ -763,17 +745,11 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   dotData: FlDotData(
                     show: true,
                     getDotPainter: (spot, _, __, ___) {
-                      final idx          = spot.x.toInt();
-                      final isNewSession = idx >= 0 && idx < pts.length
-                          ? pts[idx].isSessionStart
-                          : false;
                       return FlDotCirclePainter(
-                        radius:      isNewSession ? 6 : 4,
+                        radius:      4,
                         color:       widget.colour,
-                        strokeWidth: isNewSession ? 2.5 : 1,
-                        strokeColor: isNewSession
-                            ? const Color(0xFF111111)
-                            : widget.colour.withOpacity(0.4),
+                        strokeWidth: 1,
+                        strokeColor: widget.colour.withOpacity(0.4),
                       );
                     },
                   ),
@@ -881,9 +857,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
         Text(
           '${pts.length} set${pts.length == 1 ? '' : 's'} total',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.35),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+            color: widget.colour,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
@@ -905,7 +881,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
         const Text(
           'SESSIONS',
           style: TextStyle(
-            color: Colors.white38,
+            color: Colors.white70,
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
