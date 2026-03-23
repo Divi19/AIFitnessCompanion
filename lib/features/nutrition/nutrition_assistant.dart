@@ -323,7 +323,6 @@ class _ExercisePickerSheet extends StatelessWidget {
               ),
             ),
           ),
-
           const Text(
             'SELECT EXERCISE',
             style: TextStyle(
@@ -339,7 +338,6 @@ class _ExercisePickerSheet extends StatelessWidget {
             style: TextStyle(color: Colors.white54, fontSize: 13),
           ),
           const SizedBox(height: 20),
-
           if (exercises.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
@@ -498,6 +496,15 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Compute avg angle across all sets that have data
+    final anglePoints = _points
+        ?.where((p) => p.avgJointAngle != null)
+        .toList() ?? [];
+    final overallAvgAngle = anglePoints.isNotEmpty
+        ? anglePoints.map((p) => p.avgJointAngle!).reduce((a, b) => a + b) /
+            anglePoints.length
+        : null;
+
     return DraggableScrollableSheet(
       initialChildSize: 0.82,
       minChildSize:     0.5,
@@ -597,9 +604,18 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             if (_points != null && _points!.isNotEmpty)
               _buildSessionLegend(_points!),
 
+            // ── Joint angle comparison ────────────────────────────────────
+            // Only shown for exercises that have ideal angle data AND where
+            // at least one session has landmark data.
+            if (overallAvgAngle != null &&
+                kIdealAngles.containsKey(widget.exercise)) ...[
+              const SizedBox(height: 24),
+              _buildAngleComparison(overallAvgAngle),
+            ],
+
             const SizedBox(height: 24),
 
-            // ── How it works section ──────────────────────────────────
+            // ── How it works ──────────────────────────────────────────────
             _buildHowItWorks(),
           ],
         ),
@@ -608,7 +624,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
   }
 
   Widget _buildChart(List<SetTrendPoint> pts) {
-    // Use globalSetIndex - 1 as x so spots are 0-based indices
     final spots = pts.asMap().entries.map((e) {
       return FlSpot(e.key.toDouble(), e.value.score);
     }).toList();
@@ -616,7 +631,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     final bestScore = pts.map((p) => p.score).reduce((a, b) => a > b ? a : b);
     final avgScore  = pts.map((p) => p.score).reduce((a, b) => a + b) / pts.length;
 
-    // Session boundary indices (where a new day starts after the first)
     final sessionStartIndices = <int>[];
     for (int i = 0; i < pts.length; i++) {
       if (pts[i].isSessionStart) sessionStartIndices.add(i);
@@ -640,12 +654,13 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   strokeWidth: 1,
                 ),
               ),
-              // Show x and y axis lines
               borderData: FlBorderData(
                 show: true,
                 border: Border(
-                  bottom: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
-                  left:   BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+                  bottom: BorderSide(
+                      color: Colors.white.withOpacity(0.2), width: 1),
+                  left: BorderSide(
+                      color: Colors.white.withOpacity(0.2), width: 1),
                 ),
               ),
               extraLinesData: ExtraLinesData(
@@ -695,7 +710,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     interval: 1,
                     getTitlesWidget: (value, meta) {
                       final idx = value.toInt();
-                      // Only show labels that correspond exactly to a data point
                       if (value != idx.toDouble()) return const SizedBox.shrink();
                       if (idx < 0 || idx >= pts.length) return const SizedBox.shrink();
                       final pt           = pts[idx];
@@ -724,8 +738,12 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                         final idx = s.x.toInt();
                         if (idx < 0 || idx >= pts.length) return null;
                         final pt  = pts[idx];
+                        final angleStr = pt.avgJointAngle != null
+                            ? '  ·  ${pt.avgJointAngle!.toStringAsFixed(1)}°'
+                            : '';
                         return LineTooltipItem(
-                          'Session ${pt.sessionIndex + 1} · Set ${pt.setNumber}\n${pt.score.toInt()}% form',
+                          'Session ${pt.sessionIndex + 1} · Set ${pt.setNumber}\n'
+                          '${pt.score.toInt()}% form$angleStr',
                           TextStyle(
                             color: widget.colour,
                             fontWeight: FontWeight.w700,
@@ -772,7 +790,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
         const SizedBox(height: 12),
 
-        // Stats row: average + best with brighter labels
+        // Stats row: average + best
         Row(
           children: [
             Expanded(
@@ -788,10 +806,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'AVERAGE SET',
                       style: TextStyle(
-                        // Brightened from 0.6 → full white
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -825,10 +842,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'BEST SET',
                       style: TextStyle(
-                        // Brightened from 0.6 → full white
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -853,7 +869,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
         const SizedBox(height: 8),
 
-        // Total sets — small inline text, no box
         Text(
           '${pts.length} set${pts.length == 1 ? '' : 's'} total',
           style: TextStyle(
@@ -912,7 +927,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               dateLabel = '${day.day} ${months[day.month - 1]}';
             }
 
-            // Find which global set numbers belong to this session
             final setsInSession = pts
                 .where((p) => p.sessionIndex == idx)
                 .map((p) => p.xLabel)
@@ -945,7 +959,216 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     );
   }
 
-  // ── How it works section ─────────────────────────────────────────────────
+  // ── Joint angle comparison widget ────────────────────────────────────────
+  // Shows a horizontal range bar comparing the user's average joint angle
+  // against the biomechanically ideal range for this exercise.
+  //
+  // The bar spans 0° → scale° (e.g. 0–180°).
+  // The ideal zone is highlighted in green.
+  // The user's angle is a coloured tick — green if inside, orange if outside.
+  // A plain-English status line below explains the result.
+  Widget _buildAngleComparison(double userAngle) {
+    final ideal = kIdealAngles[widget.exercise]!;
+    final isInIdealRange = userAngle >= ideal.min && userAngle <= ideal.max;
+
+    // How far off is the user? Used for the status message.
+    final double deviation;
+    final String direction;
+    if (userAngle < ideal.min) {
+      deviation = ideal.min - userAngle;
+      direction = 'too acute'; // angle too small = going too deep / bending too much
+    } else if (userAngle > ideal.max) {
+      deviation = userAngle - ideal.max;
+      direction = 'too shallow'; // angle too large = not going deep enough
+    } else {
+      deviation = 0;
+      direction = '';
+    }
+
+    final tickColour = isInIdealRange
+        ? const Color(0xFFB9FF2B)
+        : const Color(0xFFFF5E00);
+
+    final String statusText;
+    if (isInIdealRange) {
+      statusText = 'Your depth is within the ideal range — great work.';
+    } else if (direction == 'too shallow') {
+      statusText =
+          'You\'re ${deviation.toStringAsFixed(0)}° too shallow — try to go ${deviation > 20 ? 'significantly' : 'slightly'} deeper next set.';
+    } else {
+      statusText =
+          'You\'re going ${deviation.toStringAsFixed(0)}° past the ideal range — ease off depth slightly to protect your joints.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: tickColour.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(Icons.straighten_rounded,
+                  color: tickColour.withOpacity(0.8), size: 14),
+              const SizedBox(width: 8),
+              const Text(
+                'JOINT ANGLE ANALYSIS',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            ideal.joint,
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 16),
+
+          // Range bar
+          LayoutBuilder(builder: (context, constraints) {
+            final totalWidth = constraints.maxWidth;
+            final idealStartFrac = ideal.min / ideal.scale;
+            final idealEndFrac   = ideal.max / ideal.scale;
+            final userFrac       = (userAngle / ideal.scale).clamp(0.0, 1.0);
+
+            return Column(
+              children: [
+                // Labels: 0° on left, scale° on right
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('0°',
+                        style: const TextStyle(
+                            color: Colors.white24, fontSize: 9)),
+                    Text('${ideal.scale.toInt()}°',
+                        style: const TextStyle(
+                            color: Colors.white24, fontSize: 9)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+
+                // Bar stack
+                SizedBox(
+                  height: 20,
+                  child: Stack(
+                    children: [
+                      // Full background track
+                      Container(
+                        height: 8,
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      // Ideal zone highlight (green)
+                      Positioned(
+                        left: totalWidth * idealStartFrac,
+                        width: totalWidth * (idealEndFrac - idealStartFrac),
+                        top: 6,
+                        height: 8,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFB9FF2B).withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      // User's angle tick mark
+                      Positioned(
+                        left: (totalWidth * userFrac - 1.5)
+                            .clamp(0.0, totalWidth - 3),
+                        top: 2,
+                        child: Container(
+                          width: 3,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: tickColour,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Angle labels below bar
+                Row(
+                  children: [
+                    // Ideal range label, positioned under the green zone
+                    SizedBox(width: totalWidth * idealStartFrac),
+                    Flexible(
+                      child: Text(
+                        'Ideal ${ideal.min.toInt()}–${ideal.max.toInt()}°',
+                        style: const TextStyle(
+                          color: Color(0xFFB9FF2B),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // User's angle label, right-aligned
+                    Text(
+                      'Yours ${userAngle.toStringAsFixed(1)}°',
+                      style: TextStyle(
+                        color: tickColour,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }),
+
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 10),
+
+          // Status line
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isInIdealRange
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.info_outline_rounded,
+                color: tickColour,
+                size: 14,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.75),
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── How it works section ──────────────────────────────────────────────────
   Widget _buildHowItWorks() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -982,6 +1205,16 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 'Each set is scored using: reps ÷ (reps + form corrections) × 100. '
                 'A perfect set with zero corrections scores 100%. '
                 'The more the AI had to correct your form, the lower the score.',
+          ),
+          const SizedBox(height: 10),
+          _howItWorksRow(
+            icon: Icons.straighten_rounded,
+            colour: widget.colour,
+            title: 'Joint Angle',
+            body:
+                'Your average joint angle at the deepest point of each rep is '
+                'measured using MediaPipe pose landmarks and compared against '
+                'biomechanically ideal ranges from exercise science.',
           ),
           const SizedBox(height: 10),
           _howItWorksRow(
@@ -1196,7 +1429,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
           mainAxisSize: MainAxisSize.max,
           children: [
 
-            // ── Header with trend button ──────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
               child: Row(
@@ -1259,14 +1491,11 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Strip ─────────────────────────────────────────────────────
             SizedBox(
               height: 100,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 child: widget.selectedDay == null
-
-                    // DATE BOXES
                     ? ListView(
                         key: const ValueKey('dates'),
                         scrollDirection: Axis.horizontal,
@@ -1350,8 +1579,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                           );
                         }).toList(),
                       )
-
-                    // SESSION CARDS
                     : ListView.builder(
                         key: ValueKey(widget.selectedDay),
                         controller: widget.stripScrollController,
@@ -1441,7 +1668,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Debrief panel ─────────────────────────────────────────────
             if (widget.expandedSession != null)
               Expanded(
                 child: SingleChildScrollView(
