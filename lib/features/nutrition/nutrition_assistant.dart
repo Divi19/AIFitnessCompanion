@@ -645,21 +645,17 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Reverted to original 180 height
         SizedBox(
-          height: 200,
+          height: 180,
           child: LineChart(
             LineChartData(
               minY: 0,
               maxY: 100,
-              minX: -0.5,
-              maxX: pts.length - 0.5,
-              rangeAnnotations: RangeAnnotations(
-                verticalRangeAnnotations: bands,
-              ),
+              // No minX/maxX padding — this was causing ghost labels at edges
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
-                // Show grid at every 25 interval
                 horizontalInterval: 25,
                 getDrawingHorizontalLine: (_) => FlLine(
                   color: Colors.white.withOpacity(0.07),
@@ -667,8 +663,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 ),
               ),
               borderData: FlBorderData(show: false),
+              rangeAnnotations: RangeAnnotations(
+                verticalRangeAnnotations: bands,
+              ),
               extraLinesData: ExtraLinesData(
-                // Dashed vertical line at each session boundary
                 verticalLines: sessionStartIndices.map((i) {
                   return VerticalLine(
                     x: i.toDouble(),
@@ -693,7 +691,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     sideTitles: SideTitles(showTitles: false)),
                 rightTitles: const AxisTitles(
                     sideTitles: SideTitles(showTitles: false)),
-                // Y axis: show 0, 25, 50, 75, 100
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
@@ -709,24 +706,26 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     ),
                   ),
                 ),
-                // X axis: show every label, all white
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 22,
-                    // interval = 1 so every point gets a label
                     interval: 1,
                     getTitlesWidget: (value, meta) {
                       final idx = value.toInt();
+                      // Suppress labels that fl_chart renders outside our data range
                       if (idx < 0 || idx >= pts.length) {
+                        return const SizedBox.shrink();
+                      }
+                      // Also suppress the auto-generated min/max edge labels
+                      if (value == meta.min || value == meta.max) {
                         return const SizedBox.shrink();
                       }
                       final pt           = pts[idx];
                       final isNewSession = pt.isSessionStart;
                       return Text(
-                        pt.xLabel, // always unique e.g. S1, S2, S3, S4
+                        pt.xLabel,
                         style: TextStyle(
-                          // New session start: exercise colour; others: white54
                           color: isNewSession
                               ? widget.colour
                               : Colors.white54,
@@ -749,7 +748,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                         if (idx < 0 || idx >= pts.length) return null;
                         final pt  = pts[idx];
                         return LineTooltipItem(
-                          // Show local set number (within day) in tooltip
                           'Session ${pt.sessionIndex + 1} · Set ${pt.setNumber}\n${pt.score.toInt()}% form',
                           TextStyle(
                             color: widget.colour,
@@ -775,8 +773,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                           ? pts[idx].isSessionStart
                           : false;
                       return FlDotCirclePainter(
-                        // New session start: larger diamond-ish dot with ring
-                        // Regular dot: smaller filled circle
                         radius:      isNewSession ? 6 : 4,
                         color:       widget.colour,
                         strokeWidth: isNewSession ? 2.5 : 1,
@@ -805,7 +801,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
         const SizedBox(height: 12),
 
-        // Stats row: average + best, both in exercise colour
+        // Stats row: average + best with brighter labels
         Row(
           children: [
             Expanded(
@@ -824,9 +820,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     Text(
                       'AVERAGE SET',
                       style: TextStyle(
-                        color: widget.colour.withOpacity(0.6),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        // Brightened from 0.6 → full white
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 1,
                       ),
                     ),
@@ -860,9 +857,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     Text(
                       'BEST SET',
                       style: TextStyle(
-                        color: widget.colour.withOpacity(0.6),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        // Brightened from 0.6 → full white
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 1,
                       ),
                     ),
@@ -880,6 +878,18 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               ),
             ),
           ],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Total sets — small inline text, no box
+        Text(
+          '${pts.length} set${pts.length == 1 ? '' : 's'} total',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.35),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
