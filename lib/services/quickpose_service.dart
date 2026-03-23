@@ -14,25 +14,38 @@ class QuickPoseService {
 
   /// Stream of session summaries — fires once when a valid session ends.
   /// Each event is a Map containing:
-  ///   - 'exercise'    : String
-  ///   - 'reps'        : int
-  ///   - 'durationMs'  : int
-  ///   - 'feedbackMap' : Map<String, int> — feedback message → occurrence count
+  ///   - 'exercise'       : String
+  ///   - 'reps'           : int
+  ///   - 'durationMs'     : int
+  ///   - 'feedbackMap'    : Map<String, int>
+  ///   - 'avgJointAngle'  : double? — average joint angle at rep bottom,
+  ///                        null if landmarks were not visible this session.
+  ///                        Squat/lunge: hip-knee-ankle angle (°).
+  ///                        Push-up: shoulder-elbow-wrist angle (°).
   Stream<Map<String, dynamic>> get sessionStream {
     return _sessionChannel
         .receiveBroadcastStream()
         .map((event) {
           final raw = Map<String, dynamic>.from(event as Map);
+
           // feedbackMap arrives as Map<String, dynamic> — cast values to int
           final rawFeedback = raw['feedbackMap'] as Map? ?? {};
           final feedbackMap = rawFeedback.map(
             (k, v) => MapEntry(k.toString(), (v as num).toInt()),
           );
+
+          // avgJointAngle arrives as float from Kotlin.
+          // -1.0 means no angle data was captured (landmarks not visible).
+          // We normalise that to null for cleaner handling in Dart.
+          final rawAngle = raw['avgJointAngle'] as double?;
+          final avgJointAngle = (rawAngle == null || rawAngle < 0) ? null : rawAngle;
+
           return {
-            'exercise':   raw['exercise'],
-            'reps':       raw['reps'],
-            'durationMs': raw['durationMs'],
-            'feedbackMap': feedbackMap,
+            'exercise':      raw['exercise'],
+            'reps':          raw['reps'],
+            'durationMs':    raw['durationMs'],
+            'feedbackMap':   feedbackMap,
+            'avgJointAngle': avgJointAngle,
           };
         });
   }
