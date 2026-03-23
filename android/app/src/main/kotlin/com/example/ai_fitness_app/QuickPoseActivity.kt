@@ -33,6 +33,8 @@ class QuickPoseActivity : ComponentActivity() {
         const val EXTRA_SESSION_DURATION_MS = "session_duration_ms"
         const val EXTRA_SESSION_FEEDBACK_KEYS   = "session_feedback_keys"
         const val EXTRA_SESSION_FEEDBACK_VALUES = "session_feedback_values"
+        // New: average joint angle at the bottom of each rep
+        const val EXTRA_SESSION_AVG_ANGLE   = "session_avg_joint_angle"
 
         const val MIN_REPS        = 3
         const val MIN_DURATION_MS = 20_000L
@@ -89,6 +91,18 @@ class QuickPoseActivity : ComponentActivity() {
     private var lastRepTime          = 0L
     private var formFeedbackCooldown = 0
     private var prevCounterValue     = 0f
+
+    // ── Joint angle accumulator ───────────────────────────────────────────
+    // Collects the angle measured at the bottom of each rep.
+    // For squats/lunges: hip-knee-ankle angle.
+    // For push-ups: shoulder-elbow-wrist angle.
+    // Only populated when landmarks are visible and confidence is high.
+    // Averaged at session end and broadcast alongside the session summary.
+    private val jointAngles = mutableListOf<Float>()
+
+    // Tracks whether we have already captured the angle for the current rep.
+    // Resets when the counter value rises back above DEPTH_THRESHOLD.
+    private var repAngleCaptured = false
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
@@ -155,9 +169,6 @@ class QuickPoseActivity : ComponentActivity() {
         )
         root.addView(cameraView, cameraParams)
 
-        // ── FIX: back button created first, then added with separate addView call ──
-        // The original code had a syntax error passing LayoutParams via a comma
-        // inside the apply block. Kotlin does not support that syntax.
         val backBtn = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             setBackgroundColor(Color.argb(150, 0, 0, 0))
@@ -258,6 +269,9 @@ class QuickPoseActivity : ComponentActivity() {
         formFeedbackCooldown = 0
         prevCounterValue     = 0f
         counter.reset()
+        // Reset angle accumulator for new session
+        jointAngles.clear()
+        repAngleCaptured = false
     }
 
     private fun broadcastSessionIfValid() {
@@ -273,6 +287,13 @@ class QuickPoseActivity : ComponentActivity() {
             return
         }
 
+        // Compute average joint angle — -1f signals no data was captured
+        val avgAngle = if (jointAngles.isNotEmpty())
+            jointAngles.sum() / jointAngles.size
+        else -1f
+
+        println("=== SESSION ANGLES: samples=${jointAngles.size}, avg=${avgAngle}° ===")
+
         val feedbackKeys   = feedbackFrequency.keys.toTypedArray()
         val feedbackValues = feedbackFrequency.values.map { it }.toIntArray()
         println("=== SESSION SAVED: broadcasting to Flutter ===")
@@ -283,6 +304,7 @@ class QuickPoseActivity : ComponentActivity() {
             putExtra(EXTRA_SESSION_DURATION_MS,     durationMs)
             putExtra(EXTRA_SESSION_FEEDBACK_KEYS,   feedbackKeys)
             putExtra(EXTRA_SESSION_FEEDBACK_VALUES, feedbackValues)
+            putExtra(EXTRA_SESSION_AVG_ANGLE,       avgAngle)
             setPackage(packageName)
         })
     }
@@ -327,6 +349,51 @@ class QuickPoseActivity : ComponentActivity() {
         return Math.toDegrees(
             acos((dot / (magA * magC)).toDouble().coerceIn(-1.0, 1.0))
         ).toFloat()
+    }
+
+    // ── Capture angle at the deepest point of a rep ───────────────────────
+    // Called every frame when counterValue <= DEPTH_THRESHOLD (bottom of rep).
+    // We capture once per rep (repAngleCaptured flag) to avoid duplicates.
+    // Returns the angle if landmarks were available, null otherwise.
+    private fun captureRepAngle(exercise: String, p: List<*>): Float? {
+        if (p.isEmpty()) return null
+        return when (exercise) {
+            "squat" -> {
+                val lHip   = lm(p, LM_LEFT_HIP)    ?: return null
+                val lKnee  = lm(p, LM_LEFT_KNEE)   ?: return null
+                val lAnkle = lm(p, LM_LEFT_ANKLE)  ?: return null
+                val rHip   = lm(p, LM_RIGHT_HIP)   ?: return null
+                val rKnee  = lm(p, LM_RIGHT_KNEE)  ?: return null
+                val rAnkle = lm(p, LM_RIGHT_ANKLE) ?: return null
+                val left  = angleDeg(lHip.x, lHip.y, lKnee.x, lKnee.y, lAnkle.x, lAnkle.y)
+                val right = angleDeg(rHip.x, rHip.y, rKnee.x, rKnee.y, rAnkle.x, rAnkle.y)
+                (left + right) / 2f
+            }
+            "pushup" -> {
+                val lShoulder = lm(p, LM_LEFT_SHOULDER)  ?: return null
+                val lElbow    = lm(p, LM_LEFT_ELBOW)     ?: return null
+                val lWrist    = lm(p, LM_LEFT_WRIST)     ?: return null
+                val rShoulder = lm(p, LM_RIGHT_SHOULDER) ?: return null
+                val rElbow    = lm(p, LM_RIGHT_ELBOW)    ?: return null
+                val rWrist    = lm(p, LM_RIGHT_WRIST)    ?: return null
+                val left  = angleDeg(lShoulder.x, lShoulder.y, lElbow.x, lElbow.y, lWrist.x, lWrist.y)
+                val right = angleDeg(rShoulder.x, rShoulder.y, rElbow.x, rElbow.y, rWrist.x, rWrist.y)
+                (left + right) / 2f
+            }
+            "lunge_left" -> {
+                val hip   = lm(p, LM_LEFT_HIP)   ?: return null
+                val knee  = lm(p, LM_LEFT_KNEE)  ?: return null
+                val ankle = lm(p, LM_LEFT_ANKLE) ?: return null
+                angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
+            }
+            "lunge_right" -> {
+                val hip   = lm(p, LM_RIGHT_HIP)   ?: return null
+                val knee  = lm(p, LM_RIGHT_KNEE)  ?: return null
+                val ankle = lm(p, LM_RIGHT_ANKLE) ?: return null
+                angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
+            }
+            else -> null
+        }
     }
 
     private fun checkDepthAtRepCompletion(exercise: String, p: List<*>): String? {
@@ -443,7 +510,6 @@ class QuickPoseActivity : ComponentActivity() {
 
             if (isTimerExercise(exerciseName)) {
                 startTimer()
-
                 quickPose.start(
                     arrayOf(featureFor(exerciseName)),
                     onFrame = { _, _, _, feedback, _ ->
@@ -464,7 +530,7 @@ class QuickPoseActivity : ComponentActivity() {
             } else {
                 quickPose.start(
                     arrayOf(featureFor(exerciseName)),
-                    onFrame = { status, _, features, feedback, _ ->
+                    onFrame = { status, _, features, feedback, landmarks ->
 
                         val statusStr = if (status is Status.Success) "success" else "loading"
 
@@ -472,13 +538,34 @@ class QuickPoseActivity : ComponentActivity() {
                             it.isRequired == true
                         } ?: false
 
+                        // ── Get pose landmarks for angle capture ──────────
+                        val poseList = getPoseLandmarks(landmarks)
+
                         if (features != null && features.isNotEmpty()) {
                             features.forEach { (feature, result) ->
                                 if (feature is Feature.Fitness && result.value != null) {
-                                    isAtProperDepth = result.value <= DEPTH_THRESHOLD
+                                    val counterValue = result.value
+                                    isAtProperDepth  = counterValue <= DEPTH_THRESHOLD
+
+                                    // ── Angle capture at rep bottom ───────
+                                    // When the counter value drops to/below DEPTH_THRESHOLD
+                                    // the user is at the deepest point of the rep.
+                                    // We capture once per rep using repAngleCaptured flag.
+                                    if (counterValue <= DEPTH_THRESHOLD && !repAngleCaptured) {
+                                        val angle = captureRepAngle(exerciseName, poseList)
+                                        if (angle != null) {
+                                            jointAngles.add(angle)
+                                            println("=== ANGLE CAPTURE: exercise=$exerciseName angle=$angle° total=${jointAngles.size} ===")
+                                        }
+                                        repAngleCaptured = true
+                                    }
+                                    // Reset capture flag when user rises back up
+                                    if (counterValue > DEPTH_THRESHOLD) {
+                                        repAngleCaptured = false
+                                    }
 
                                     if (!hasRequiredFormIssue) {
-                                        val newCount = counter.count(result.value).count
+                                        val newCount = counter.count(counterValue).count
                                         if (newCount != lastBroadcastedRepCount) {
                                             lastBroadcastedRepCount = newCount
                                             runOnUiThread {
