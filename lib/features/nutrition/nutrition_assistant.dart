@@ -713,14 +713,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     interval: 1,
                     getTitlesWidget: (value, meta) {
                       final idx = value.toInt();
-                      // Suppress labels that fl_chart renders outside our data range
-                      if (idx < 0 || idx >= pts.length) {
-                        return const SizedBox.shrink();
-                      }
-                      // Also suppress the auto-generated min/max edge labels
-                      if (value == meta.min || value == meta.max) {
-                        return const SizedBox.shrink();
-                      }
+                      // Only show labels that correspond exactly to a data point
+                      if (value != idx.toDouble()) return const SizedBox.shrink();
+                      if (idx < 0 || idx >= pts.length) return const SizedBox.shrink();
                       final pt           = pts[idx];
                       final isNewSession = pt.isSessionStart;
                       return Text(
