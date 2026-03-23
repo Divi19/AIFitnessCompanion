@@ -14,6 +14,11 @@ class WorkoutSession {
   final Map<String, int> feedbackMap;
   final String debriefText;
   final DateTime timestamp;
+  // Average joint angle at the bottom of each rep during this session.
+  // Squat/lunge: hip-knee-ankle angle in degrees.
+  // Push-up: shoulder-elbow-wrist angle in degrees.
+  // null means landmarks were not visible enough to capture data.
+  final double? avgJointAngle;
 
   WorkoutSession({
     required this.id,
@@ -23,11 +28,10 @@ class WorkoutSession {
     required this.feedbackMap,
     required this.debriefText,
     required this.timestamp,
+    this.avgJointAngle,
   });
 
   // ── Form quality score ───────────────────────────────────────────────────
-  // score = reps / (reps + totalFeedback) * 100, clamped 10–100.
-  // Perfect form (0 feedback) = 100. Equal feedback to reps = 50.
   double get formScore {
     if (reps == 0) return 10.0;
     final totalFeedback = feedbackMap.values.fold(0, (a, b) => a + b);
@@ -76,38 +80,71 @@ class WorkoutSession {
   factory WorkoutSession.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final rawFeedback = data['feedbackMap'] as Map<String, dynamic>? ?? {};
+    // avgJointAngle is optional — older sessions won't have it
+    final rawAngle = data['avgJointAngle'];
+    final avgAngle = rawAngle != null ? (rawAngle as num).toDouble() : null;
     return WorkoutSession(
-      id:          doc.id,
-      exercise:    data['exercise']    ?? '',
-      reps:        data['reps']        ?? 0,
-      durationMs:  data['durationMs']  ?? 0,
-      feedbackMap: rawFeedback.map((k, v) => MapEntry(k, (v as num).toInt())),
-      debriefText: data['debriefText'] ?? '',
-      timestamp:   (data['timestamp'] as Timestamp).toDate(),
+      id:             doc.id,
+      exercise:       data['exercise']    ?? '',
+      reps:           data['reps']        ?? 0,
+      durationMs:     data['durationMs']  ?? 0,
+      feedbackMap:    rawFeedback.map((k, v) => MapEntry(k, (v as num).toInt())),
+      debriefText:    data['debriefText'] ?? '',
+      timestamp:      (data['timestamp'] as Timestamp).toDate(),
+      avgJointAngle:  avgAngle,
     );
   }
 }
 
+// ── Ideal angle ranges per exercise ─────────────────────────────────────
+// These are the biomechanically ideal joint angles at the deepest point
+// of each rep, based on standard exercise science references.
+// Used by the angle comparison visualisation in the trend chart sheet.
+class IdealAngleRange {
+  final double min;   // minimum ideal angle (degrees)
+  final double max;   // maximum ideal angle (degrees)
+  final double scale; // full axis range for the visualisation bar
+  final String joint; // human-readable joint description
+
+  const IdealAngleRange({
+    required this.min,
+    required this.max,
+    required this.scale,
+    required this.joint,
+  });
+}
+
+const Map<String, IdealAngleRange> kIdealAngles = {
+  'squat': IdealAngleRange(
+    min: 80, max: 100, scale: 180,
+    joint: 'Knee angle at bottom',
+  ),
+  'pushup': IdealAngleRange(
+    min: 80, max: 95, scale: 180,
+    joint: 'Elbow angle at bottom',
+  ),
+  'lunge_left': IdealAngleRange(
+    min: 85, max: 95, scale: 180,
+    joint: 'Front knee angle at bottom',
+  ),
+  'lunge_right': IdealAngleRange(
+    min: 85, max: 95, scale: 180,
+    joint: 'Front knee angle at bottom',
+  ),
+};
+
 // ── Set trend data point ──────────────────────────────────────────────────
-// One point per session of a specific exercise, ordered oldest→newest.
-//
-// xLabel uses a GLOBAL set counter (never resets) so every point on the
-// x-axis has a unique label — e.g. S1, S2, S3 from day 1, then S4, S5
-// from day 2. This prevents two different sessions both showing "S1".
-//
-// setNumber is the LOCAL set number within the day (restarts at 1 each day).
-// sessionIndex is the 0-based day group, used for background banding.
-// isSessionStart is true for the first set of every new day group after
-// the first, used to draw the separator and change dot style.
 class SetTrendPoint {
   final String sessionId;
-  final double score;          // formScore 0–100
-  final int globalSetIndex;    // unique 1-based index across all time (x-axis)
-  final int setNumber;         // local 1-based set number within the day
-  final int sessionIndex;      // 0-based day group index
-  final bool isSessionStart;   // true = first set of a new day (after day 0)
-  final String xLabel;         // e.g. "S1", "S4" — always unique
+  final double score;
+  final int globalSetIndex;
+  final int setNumber;
+  final int sessionIndex;
+  final bool isSessionStart;
+  final String xLabel;
   final DateTime timestamp;
+  final int reps;
+  final double? avgJointAngle; // may be null if landmarks were not visible
 
   const SetTrendPoint({
     required this.sessionId,
@@ -118,6 +155,8 @@ class SetTrendPoint {
     required this.isSessionStart,
     required this.xLabel,
     required this.timestamp,
+    required this.reps,
+    this.avgJointAngle,
   });
 }
 
@@ -130,6 +169,7 @@ class WorkoutSessionService {
     required int reps,
     required int durationMs,
     required Map<String, int> feedbackMap,
+    double? avgJointAngle, // null-safe — older saves without angle still work
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
@@ -146,18 +186,24 @@ class WorkoutSessionService {
         userData:    userData,
       );
 
-      final docRef = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workout_sessions')
-          .add({
+      final docData = <String, dynamic>{
         'exercise':    exercise,
         'reps':        reps,
         'durationMs':  durationMs,
         'feedbackMap': feedbackMap,
         'debriefText': debriefText,
         'timestamp':   FieldValue.serverTimestamp(),
-      });
+      };
+      // Only write avgJointAngle when we actually have data
+      if (avgJointAngle != null) {
+        docData['avgJointAngle'] = avgJointAngle;
+      }
+
+      final docRef = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .add(docData);
 
       final saved = await docRef.get();
       return WorkoutSession.fromFirestore(saved);
@@ -199,20 +245,16 @@ class WorkoutSessionService {
   }
 
   // ── Distinct exercises that have at least one session ────────────────────
-  // Returns exercise keys in recency order, deduped.
-  // Uses client-side sort to avoid composite index on (exercise, timestamp).
   Future<List<String>> getExercisesWithSessions() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
 
-    // Fetch without orderBy to avoid index requirement, sort client-side
     final snapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workout_sessions')
         .get();
 
-    // Sort descending by timestamp client-side
     final docs = snapshot.docs.toList()
       ..sort((a, b) {
         final ta = (a.data()['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
@@ -230,16 +272,10 @@ class WorkoutSessionService {
   }
 
   // ── Per-set trend for a specific exercise ────────────────────────────────
-  // Returns one SetTrendPoint per session of [exercise], oldest→newest.
-  //
-  // Key fix: xLabel uses a GLOBAL counter that never resets, so every
-  // point on the x-axis is unique. The local setNumber (per-day) is stored
-  // separately for tooltip display ("Set 1 of this session").
   Future<List<SetTrendPoint>> getSetTrendForExercise(String exercise) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
 
-    // No orderBy — sort client-side to avoid composite index requirement
     final snapshot = await _db
         .collection('users')
         .doc(uid)
@@ -252,16 +288,16 @@ class WorkoutSessionService {
     final sessions = snapshot.docs
         .map(WorkoutSession.fromFirestore)
         .toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // oldest → newest
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
     final points      = <SetTrendPoint>[];
     DateTime? lastDay;
-    int localSetNum   = 0;  // resets each calendar day
-    int sessionIndex  = -1; // bumps each calendar day
-    int globalIdx     = 0;  // never resets — unique x position for every point
+    int localSetNum   = 0;
+    int sessionIndex  = -1;
+    int globalIdx     = 0;
 
     for (final s in sessions) {
-      final day = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final day      = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
       final isNewDay = lastDay == null || day != lastDay;
 
       if (isNewDay) {
@@ -278,12 +314,14 @@ class WorkoutSessionService {
       points.add(SetTrendPoint(
         sessionId:      s.id,
         score:          s.formScore,
-        globalSetIndex: globalIdx,      // unique x-axis position
-        setNumber:      localSetNum,    // local set number within the day
+        globalSetIndex: globalIdx,
+        setNumber:      localSetNum,
         sessionIndex:   sessionIndex,
         isSessionStart: isSessionStart,
-        xLabel:         'S$globalIdx', // always unique e.g. S1, S2, S3, S4
+        xLabel:         'S$globalIdx',
         timestamp:      s.timestamp,
+        reps:           s.reps,
+        avgJointAngle:  s.avgJointAngle,
       ));
     }
 
