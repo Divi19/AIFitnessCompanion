@@ -88,26 +88,34 @@ class WorkoutSession {
   }
 }
 
-// ── Set trend data point ─────────────────────────────────────────────────
-// One point per set (session) of a specific exercise, ordered oldest→newest.
-// setNumber restarts at 1 for each new calendar day — so if the user did
-// squats on Monday and Wednesday, Monday has Set 1, Set 2 and Wednesday
-// has its own Set 1, Set 2.
-// sessionIndex tells the chart which "day group" this point belongs to,
-// used to colour-code sets from different days differently.
+// ── Set trend data point ──────────────────────────────────────────────────
+// One point per session of a specific exercise, ordered oldest→newest.
+//
+// xLabel uses a GLOBAL set counter (never resets) so every point on the
+// x-axis has a unique label — e.g. S1, S2, S3 from day 1, then S4, S5
+// from day 2. This prevents two different sessions both showing "S1".
+//
+// setNumber is the LOCAL set number within the day (restarts at 1 each day).
+// sessionIndex is the 0-based day group, used for background banding.
+// isSessionStart is true for the first set of every new day group after
+// the first, used to draw the separator and change dot style.
 class SetTrendPoint {
   final String sessionId;
-  final double score;       // formScore 0–100
-  final int setNumber;      // 1-based within the day
-  final int sessionIndex;   // 0-based day group index (for colour banding)
-  final String xLabel;      // e.g. "S1", "S2", "S1*" (new session marker)
+  final double score;          // formScore 0–100
+  final int globalSetIndex;    // unique 1-based index across all time (x-axis)
+  final int setNumber;         // local 1-based set number within the day
+  final int sessionIndex;      // 0-based day group index
+  final bool isSessionStart;   // true = first set of a new day (after day 0)
+  final String xLabel;         // e.g. "S1", "S4" — always unique
   final DateTime timestamp;
 
   const SetTrendPoint({
     required this.sessionId,
     required this.score,
+    required this.globalSetIndex,
     required this.setNumber,
     required this.sessionIndex,
+    required this.isSessionStart,
     required this.xLabel,
     required this.timestamp,
   });
@@ -191,24 +199,30 @@ class WorkoutSessionService {
   }
 
   // ── Distinct exercises that have at least one session ────────────────────
-  // Used to populate the exercise picker in the trend chart flow.
-  // Returns exercise keys (e.g. 'squat', 'pushup') in the order they were
-  // most recently performed, deduped.
+  // Returns exercise keys in recency order, deduped.
+  // Uses client-side sort to avoid composite index on (exercise, timestamp).
   Future<List<String>> getExercisesWithSessions() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
 
+    // Fetch without orderBy to avoid index requirement, sort client-side
     final snapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workout_sessions')
-        .orderBy('timestamp', descending: true)
-        .limit(50)
         .get();
+
+    // Sort descending by timestamp client-side
+    final docs = snapshot.docs.toList()
+      ..sort((a, b) {
+        final ta = (a.data()['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+        final tb = (b.data()['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+        return tb.compareTo(ta);
+      });
 
     final seen  = <String>{};
     final order = <String>[];
-    for (final doc in snapshot.docs) {
+    for (final doc in docs) {
       final ex = (doc.data()['exercise'] as String?) ?? '';
       if (ex.isNotEmpty && seen.add(ex)) order.add(ex);
     }
@@ -216,25 +230,22 @@ class WorkoutSessionService {
   }
 
   // ── Per-set trend for a specific exercise ────────────────────────────────
-  // Returns one SetTrendPoint per session of [exercise], ordered
-  // oldest→newest (so the chart line goes left to right).
+  // Returns one SetTrendPoint per session of [exercise], oldest→newest.
   //
-  // Set numbering logic:
-  //   - Sessions are grouped by calendar day.
-  //   - Within each day the sets are numbered 1, 2, 3 …
-  //   - When a new day begins the set counter resets to 1.
-  //   - sessionIndex increments each time a new calendar day appears,
-  //     allowing the chart to colour-band different days.
+  // Key fix: xLabel uses a GLOBAL counter that never resets, so every
+  // point on the x-axis is unique. The local setNumber (per-day) is stored
+  // separately for tooltip display ("Set 1 of this session").
   Future<List<SetTrendPoint>> getSetTrendForExercise(String exercise) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
 
+    // No orderBy — sort client-side to avoid composite index requirement
     final snapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workout_sessions')
         .where('exercise', isEqualTo: exercise)
-        .get();  // no orderBy — sort client-side to avoid composite index requirement
+        .get();
 
     if (snapshot.docs.isEmpty) return [];
 
@@ -243,35 +254,36 @@ class WorkoutSessionService {
         .toList()
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // oldest → newest
 
-    final points   = <SetTrendPoint>[];
+    final points      = <SetTrendPoint>[];
     DateTime? lastDay;
-    int setNum       = 0;
-    int sessionIndex = -1;
+    int localSetNum   = 0;  // resets each calendar day
+    int sessionIndex  = -1; // bumps each calendar day
+    int globalIdx     = 0;  // never resets — unique x position for every point
 
     for (final s in sessions) {
-      final day = DateTime(
-          s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final day = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final isNewDay = lastDay == null || day != lastDay;
 
-      // New calendar day → reset set counter and bump session group index
-      if (lastDay == null || day != lastDay) {
+      if (isNewDay) {
         lastDay      = day;
-        setNum       = 0;
+        localSetNum  = 0;
         sessionIndex++;
       }
-      setNum++;
 
-      // xLabel: "S1", "S2" … If this is the first set of a new day group
-      // (other than the very first group), add a bullet to signal a new session
-      final isNewSession = setNum == 1 && sessionIndex > 0;
-      final xLabel       = isNewSession ? '●S$setNum' : 'S$setNum';
+      localSetNum++;
+      globalIdx++;
+
+      final isSessionStart = isNewDay && sessionIndex > 0;
 
       points.add(SetTrendPoint(
-        sessionId:    s.id,
-        score:        s.formScore,
-        setNumber:    setNum,
-        sessionIndex: sessionIndex,
-        xLabel:       xLabel,
-        timestamp:    s.timestamp,
+        sessionId:      s.id,
+        score:          s.formScore,
+        globalSetIndex: globalIdx,      // unique x-axis position
+        setNumber:      localSetNum,    // local set number within the day
+        sessionIndex:   sessionIndex,
+        isSessionStart: isSessionStart,
+        xLabel:         'S$globalIdx', // always unique e.g. S1, S2, S3, S4
+        timestamp:      s.timestamp,
       ));
     }
 
