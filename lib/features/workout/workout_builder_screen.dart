@@ -156,6 +156,75 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
       final calories        = insights['suggested_calories'] ?? 'Unknown';
       final bmi             = insights['bmi'] ?? 'Unknown';
 
+      // ── EXERCISE LIBRARY ────────────────────────────────────────────────────
+      // These are the ONLY trackable exercises available in the Pose Tracker.
+      // The prompt MUST restrict no-equipment plans to this list + simple extras.
+      // With-equipment plans can expand beyond this list.
+      const trackableExercises = '''
+TRACKABLE EXERCISES (available in the app's Pose Tracker — prefer these):
+  • Squat            — lower body, glutes, quads
+  • Push Up          — chest, triceps, shoulders
+  • Bicep Curl       — biceps (bodyweight variation: use water bottles or own resistance)
+  • Jumping Jack     — cardio, full body warm-up
+  • Right Lunge      — right leg, glutes, balance
+  • Left Lunge       — left leg, glutes, balance
+  • Sit Up           — core, abs
+  • Plank            — core, stability, full body
+  • Glute Bridge     — glutes, hamstrings, lower back
+
+ALLOWED SIMPLE EXTRAS (not tracked by pose, but valid for all goals):
+  • Walk / Brisk Walk   — cardio, endurance
+  • Jog in Place        — cardio
+  • High Knees          — cardio, hip flexors
+  • Mountain Climbers   — cardio, core
+  • Burpee              — full body, cardio
+  • Yoga Flow           — flexibility, mindfulness
+  • Static Stretch      — flexibility, cool-down
+  • Hip Flexor Stretch  — flexibility, mobility
+  • Child's Pose        — flexibility, recovery
+  • Cat-Cow Stretch     — spine mobility
+  • Shoulder Rolls      — upper body mobility
+  • Calf Raise          — calves, ankles
+  • Wall Sit            — quads, endurance
+  • Superman Hold       — lower back, glutes
+  • Dead Bug            — core, stability
+  • Bird Dog            — core, balance
+''';
+
+      // Goal-to-exercise guidance so Gemini picks the RIGHT exercises per goal
+      const goalExerciseGuide = '''
+GOAL → RECOMMENDED EXERCISE FOCUS:
+  Weight Loss / Fat Burn:
+    → High cardio: Jumping Jack, Burpee, High Knees, Mountain Climbers, Jog in Place
+    → Compound: Squat, Push Up, Lunge (both sides)
+    → Core finisher: Plank, Sit Up
+
+  Muscle Gain / Hypertrophy:
+    → Compound strength: Squat, Push Up, Glute Bridge, Lunge (both sides)
+    → Isolation: Bicep Curl, Sit Up
+    → Volume: high sets (4-5 × 10-15 reps), progressive overload each week
+
+  Endurance / Cardio:
+    → Sustained cardio: Jumping Jack, High Knees, Jog in Place, Burpee, Walk
+    → Circuit style: short rest, back-to-back exercises
+    → Core stability: Plank, Mountain Climbers
+
+  Flexibility / Mobility:
+    → Yoga Flow, Static Stretch, Hip Flexor Stretch, Child's Pose, Cat-Cow
+    → Mobility holds: 30–60 sec each
+    → Gentle movement: Shoulder Rolls, Calf Raise, Superman Hold
+
+  General Fitness / Full Body:
+    → Mix all categories: Squat, Push Up, Jumping Jack, Plank, Sit Up, Glute Bridge
+    → Balance: include cardio + strength + core each session
+
+  Rehabilitation / Recovery:
+    → Low-impact ONLY: Glute Bridge, Bird Dog, Dead Bug, Superman Hold, Cat-Cow
+    → Stretch priority: Hip Flexor Stretch, Child's Pose, Static Stretch
+    → SKIP: Burpee, High Knees, Jumping Jack (high impact)
+    → Very low sets: 2-3 × 8-10 reps, focus on form
+''';
+
       final prompt = '''
 You are an expert physiotherapist and certified personal trainer.
 Generate a complete $_planWeeks-week workout program for this user.
@@ -177,25 +246,37 @@ User Profile:
 - Physical Limitations / Injuries: $limitationsText
 - Uses Wheelchair: $usesWheelchair
 - Uses Prosthesis: $usesProsthesis
-- Has Weights / Equipment: $_hasWeights (${_hasWeights ? 'Include dumbbell, barbell and resistance exercises' : 'Bodyweight exercises ONLY — no equipment required'})
+- Equipment Available: ${_hasWeights ? 'Has weights/gym equipment — you MAY include dumbbell, barbell, cable, machine exercises in addition to the list below' : 'NO equipment — restrict to the exercise list below ONLY'}
 
-Strict Rules:
-- NEVER include exercises that stress injured areas
-- Adapt ALL movements for fitness level and limitations
-- Each session must fit within $_workoutDuration
-- ${_hasWeights ? 'Include weighted exercises where appropriate' : 'Use ONLY bodyweight exercises — no equipment'}
-- Output ONLY a valid JSON array, no extra text before or after
-- Structure EXACTLY as shown:
+$trackableExercises
+
+$goalExerciseGuide
+
+STRICT RULES — follow every single one:
+1. NEVER include exercises that stress injured body parts from the limitations list
+2. Adapt ALL movements for the user's fitness level
+3. Each session must fit within $_workoutDuration
+4. ${_hasWeights ? 'You may use gym/dumbbell exercises in addition to the trackable list' : 'Use ONLY exercises from the TRACKABLE EXERCISES and ALLOWED SIMPLE EXTRAS lists above — no other exercises'}
+5. Use the Goal → Exercise Focus guide to pick the RIGHT exercises for this user's goal
+6. Each week must have exactly $_daysPerWeek workout days plus rest days to fill 7 days
+7. Add progressive overload each week (increase reps, sets, or reduce rest)
+8. Keep exercise names EXACTLY matching the list above (e.g. "Right Lunge" not "Lunge" or "Forward Lunge")
+9. Keep detail concise: "3 sets × 12 reps" or "3 sets × 30 sec" format only
+10. Output ONLY a raw JSON array — no markdown, no backticks, no text before or after
+
+JSON structure EXACTLY as follows:
 [
   {
     "week": 1,
     "days": [
       {
         "day": 1,
-        "title": "Push Day",
+        "title": "Full Body Burn",
         "isRest": false,
         "exercises": [
-          {"name": "Push-ups", "detail": "3 sets × 12 reps"},
+          {"name": "Jumping Jack", "detail": "3 sets × 30 sec"},
+          {"name": "Squat", "detail": "3 sets × 15 reps"},
+          {"name": "Push Up", "detail": "3 sets × 10 reps"},
           {"name": "Plank", "detail": "3 sets × 30 sec"}
         ]
       },
@@ -208,12 +289,7 @@ Strict Rules:
     ]
   }
 ]
-- Each week must have exactly $_daysPerWeek workout days plus rest days to fill 7 days
-- Keep exercise names short (max 4 words), no asterisks or markdown
-- Keep detail concise: "3 sets × 12 reps" or "30 sec" format only
-- Add progressive overload each week
 ''';
-
 
       final response = await http.post(
         Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AppConstants.geminiApiKey}'),
@@ -598,7 +674,8 @@ Strict Rules:
       ),
     );
   }
-    // 👇 ADDED THIS MISSING FUNCTION HEADER 👇
+
+  // >>> THIS IS THE METHOD THAT WAS MISSING ITS SIGNATURE <<<
   Widget _buildBottomButton() {
     final isLast = _currentStep == 1;
     return Container(
@@ -621,7 +698,7 @@ Strict Rules:
         ),
       ),
     );
-  } // <--- This closing brace was already here, it just belonged to the missing function header
+  }
 
   Widget _stepHeader(String title, String subtitle, IconData icon) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
