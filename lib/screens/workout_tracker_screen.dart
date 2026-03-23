@@ -137,19 +137,22 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       (data) async {
         if (!mounted) return;
 
-        final exercise    = data['exercise']   as String;
-        final reps        = data['reps']       as int;
-        final durationMs  = data['durationMs'] as int;
-        final feedbackMap = Map<String, int>.from(data['feedbackMap'] as Map);
+        final exercise      = data['exercise']      as String;
+        final reps          = data['reps']          as int;
+        final durationMs    = data['durationMs']    as int;
+        final feedbackMap   = Map<String, int>.from(data['feedbackMap'] as Map);
+        // avgJointAngle is null when landmarks weren't visible — handled gracefully
+        final avgJointAngle = data['avgJointAngle'] as double?;
 
         setState(() => _savingSession = true);
 
         // Save to Firestore and generate debrief
         final session = await _sessionService.saveSession(
-          exercise:    exercise,
-          reps:        reps,
-          durationMs:  durationMs,
-          feedbackMap: feedbackMap,
+          exercise:      exercise,
+          reps:          reps,
+          durationMs:    durationMs,
+          feedbackMap:   feedbackMap,
+          avgJointAngle: avgJointAngle,
         );
 
         if (!mounted) return;
