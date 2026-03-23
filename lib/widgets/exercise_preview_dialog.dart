@@ -80,6 +80,7 @@ class _ExercisePreviewDialog extends StatefulWidget {
 class _ExercisePreviewDialogState extends State<_ExercisePreviewDialog> {
   late YoutubePlayerController _controller;
   bool _videoEnded = false;
+  bool _showControls = false;
 
   @override
   void initState() {
@@ -93,7 +94,8 @@ class _ExercisePreviewDialogState extends State<_ExercisePreviewDialog> {
         disableDragSeek: false,
         loop: false, // Don't loop - close when video ends
         enableCaption: false,
-        controlsVisibleAtStart: true,
+        controlsVisibleAtStart: false,
+        hideControls: false,
       ),
     );
 
@@ -167,21 +169,34 @@ class _ExercisePreviewDialogState extends State<_ExercisePreviewDialog> {
 
           // ── YouTube Player ──────────────────────────────────────────
           // YoutubePlayer must not be inside a scrollable widget
-          ClipRRect(
-            borderRadius: BorderRadius.zero,
-            child: YoutubePlayer(
-              controller: _controller,
-              showVideoProgressIndicator: true,
-              progressIndicatorColor: const Color(0xFFB9FF2B),
-              progressColors: const ProgressBarColors(
-                playedColor: Color(0xFFB9FF2B),
-                handleColor: Color(0xFFB9FF2B),
-                bufferedColor: Colors.white24,
-                backgroundColor: Colors.black26,
+          GestureDetector(
+            onTap: () {
+              setState(() => _showControls = !_showControls);
+              if (_showControls) {
+                _controller.updateValue(
+                  _controller.value.copyWith(isControlsVisible: true),
+                );
+              } else {
+                _controller.updateValue(
+                  _controller.value.copyWith(isControlsVisible: false),
+                );
+              }
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.zero,
+              child: YoutubePlayer(
+                controller: _controller,
+                showVideoProgressIndicator: _showControls,
+                progressIndicatorColor: const Color(0xFFB9FF2B),
+                progressColors: const ProgressBarColors(
+                  playedColor: Color(0xFFB9FF2B),
+                  handleColor: Color(0xFFB9FF2B),
+                  bufferedColor: Colors.white24,
+                  backgroundColor: Colors.black26,
+                ),
               ),
             ),
           ),
-
           // ── Tip banner ──────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
