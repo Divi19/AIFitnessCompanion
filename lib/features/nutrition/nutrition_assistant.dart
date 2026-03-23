@@ -8,18 +8,16 @@ import '../../services/rag_service.dart';
 import '../../services/workout_session_service.dart';
 
 // ── Per-exercise colour palette ───────────────────────────────────────────
-// Stays within the app's orange/green contrast palette.
-// Indexed by exercise key.
 const Map<String, Color> _exerciseColours = {
-  'squat':        Color(0xFFFF5E00), // orange
-  'pushup':       Color(0xFFB9FF2B), // volt green
-  'bicep_curl':   Color(0xFFFFB800), // amber
-  'jumping_jack': Color(0xFF00E5FF), // cyan
-  'lunge_left':   Color(0xFFFF2B6B), // pink-red
-  'lunge_right':  Color(0xFFFF2B6B), // same as lunge_left
-  'sit_up':       Color(0xFF9B59FF), // purple
-  'plank':        Color(0xFF00FF9B), // mint green
-  'glute_bridge': Color(0xFFFFE600), // yellow
+  'squat':        Color(0xFFFF5E00),
+  'pushup':       Color(0xFFB9FF2B),
+  'bicep_curl':   Color(0xFFFFB800),
+  'jumping_jack': Color(0xFF00E5FF),
+  'lunge_left':   Color(0xFFFF2B6B),
+  'lunge_right':  Color(0xFFFF2B6B),
+  'sit_up':       Color(0xFF9B59FF),
+  'plank':        Color(0xFF00FF9B),
+  'glute_bridge': Color(0xFFFFE600),
 };
 
 Color _colourFor(String exercise) =>
@@ -47,7 +45,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   WorkoutSession? _expandedSession;
   String?         _selectedDay;
 
-  // ── Send message ─────────────────────────────────────────────────────────
   Future<void> _sendMessage({String? overrideText, String? displayText}) async {
     final question = overrideText ?? _controller.text.trim();
     if (question.isEmpty || _isLoading) return;
@@ -129,7 +126,6 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
     });
   }
 
-  // ── Open exercise picker → chart flow ────────────────────────────────────
   Future<void> _openTrendFlow() async {
     final exercises = await _sessionService.getExercisesWithSessions();
     if (!mounted) return;
@@ -295,7 +291,7 @@ class _NutritionAssistantScreenState extends State<NutritionAssistantScreen> {
   }
 }
 
-// ── Exercise Picker Bottom Sheet ─────────────────────────────────────────
+// ── Exercise Picker Bottom Sheet ──────────────────────────────────────────
 class _ExercisePickerSheet extends StatelessWidget {
   final List<String> exercises;
   final WorkoutSessionService sessionService;
@@ -317,7 +313,6 @@ class _ExercisePickerSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag handle
           Center(
             child: Container(
               width: 40, height: 4,
@@ -360,7 +355,8 @@ class _ExercisePickerSheet extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'No sessions recorded yet. Complete a workout to see your form trends here.',
-                      style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+                      style: TextStyle(
+                          color: Colors.white54, fontSize: 13, height: 1.5),
                     ),
                   ),
                 ],
@@ -372,9 +368,9 @@ class _ExercisePickerSheet extends StatelessWidget {
                 shrinkWrap: true,
                 itemCount: exercises.length,
                 itemBuilder: (context, index) {
-                  final ex    = exercises[index];
+                  final ex     = exercises[index];
                   final colour = _colourFor(ex);
-                  final name  = _displayName(ex);
+                  final name   = _displayName(ex);
 
                   return GestureDetector(
                     onTap: () {
@@ -404,8 +400,7 @@ class _ExercisePickerSheet extends StatelessWidget {
                       child: Row(
                         children: [
                           Container(
-                            width: 10,
-                            height: 10,
+                            width: 10, height: 10,
                             decoration: BoxDecoration(
                               color: colour,
                               shape: BoxShape.circle,
@@ -451,7 +446,7 @@ class _ExercisePickerSheet extends StatelessWidget {
   }
 }
 
-// ── Per-set trend chart bottom sheet ─────────────────────────────────────
+// ── Per-set trend chart bottom sheet ──────────────────────────────────────
 class _SetTrendSheet extends StatefulWidget {
   final String exercise;
   final String exerciseName;
@@ -504,9 +499,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.72,
+      initialChildSize: 0.82,
       minChildSize:     0.5,
-      maxChildSize:     0.92,
+      maxChildSize:     0.95,
       builder: (_, scrollController) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFF111111),
@@ -577,7 +572,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Chart / loading / empty states
             if (_loading)
               const SizedBox(
                 height: 180,
@@ -600,9 +594,13 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
             const SizedBox(height: 20),
 
-            // Session legend — one chip per distinct sessionIndex
             if (_points != null && _points!.isNotEmpty)
               _buildSessionLegend(_points!),
+
+            const SizedBox(height: 24),
+
+            // ── How it works section ──────────────────────────────────
+            _buildHowItWorks(),
           ],
         ),
       ),
@@ -610,17 +608,37 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
   }
 
   Widget _buildChart(List<SetTrendPoint> pts) {
+    // Use globalSetIndex - 1 as x so spots are 0-based indices
     final spots = pts.asMap().entries.map((e) {
       return FlSpot(e.key.toDouble(), e.value.score);
     }).toList();
 
     final bestScore = pts.map((p) => p.score).reduce((a, b) => a > b ? a : b);
+    final avgScore  = pts.map((p) => p.score).reduce((a, b) => a + b) / pts.length;
 
-    // Unique session indices for colour banding vertical lines
-    final sessionStarts = <int>[];
+    // Session boundary indices (where a new day starts after the first)
+    final sessionStartIndices = <int>[];
     for (int i = 0; i < pts.length; i++) {
-      if (i == 0 || pts[i].sessionIndex != pts[i - 1].sessionIndex) {
-        if (i > 0) sessionStarts.add(i);
+      if (pts[i].isSessionStart) sessionStartIndices.add(i);
+    }
+
+    // Alternate background bands per session group using VerticalRangeAnnotation
+    // Even sessions: very subtle tint; odd sessions: slightly different tint
+    final bands = <VerticalRangeAnnotation>[];
+    if (pts.isNotEmpty) {
+      final boundaries = [0, ...sessionStartIndices, pts.length];
+      for (int b = 0; b < boundaries.length - 1; b++) {
+        final start = boundaries[b].toDouble();
+        final end   = (boundaries[b + 1] - 1).toDouble();
+        if (end < start) continue;
+        final isEven = b % 2 == 0;
+        bands.add(VerticalRangeAnnotation(
+          x1: start - 0.4,
+          x2: end   + 0.4,
+          color: isEven
+              ? widget.colour.withOpacity(0.04)
+              : Colors.white.withOpacity(0.03),
+        ));
       }
     }
 
@@ -628,37 +646,44 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          height: 180,
+          height: 200,
           child: LineChart(
             LineChartData(
               minY: 0,
               maxY: 100,
+              minX: -0.5,
+              maxX: pts.length - 0.5,
+              rangeAnnotations: RangeAnnotations(
+                verticalRangeAnnotations: bands,
+              ),
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
+                // Show grid at every 25 interval
                 horizontalInterval: 25,
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withOpacity(0.07),
                   strokeWidth: 1,
                 ),
               ),
               borderData: FlBorderData(show: false),
               extraLinesData: ExtraLinesData(
-                // Thin dashed vertical lines at session boundaries
-                verticalLines: sessionStarts.map((i) {
+                // Dashed vertical line at each session boundary
+                verticalLines: sessionStartIndices.map((i) {
                   return VerticalLine(
                     x: i.toDouble(),
-                    color: Colors.white.withOpacity(0.15),
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
+                    color: Colors.white.withOpacity(0.25),
+                    strokeWidth: 1.2,
+                    dashArray: [5, 4],
                     label: VerticalLineLabel(
                       show: true,
                       alignment: Alignment.topRight,
+                      padding: const EdgeInsets.only(left: 4),
                       style: const TextStyle(
                           color: Colors.white38,
                           fontSize: 8,
                           fontWeight: FontWeight.w600),
-                      labelResolver: (_) => 'New session',
+                      labelResolver: (_) => 'new session',
                     ),
                   );
                 }).toList(),
@@ -668,42 +693,47 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     sideTitles: SideTitles(showTitles: false)),
                 rightTitles: const AxisTitles(
                     sideTitles: SideTitles(showTitles: false)),
+                // Y axis: show 0, 25, 50, 75, 100
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 28,
-                    interval: 50,
-                    getTitlesWidget: (value, _) => Text(
-                      '${value.toInt()}',
-                      style: const TextStyle(
-                          color: Colors.white24, fontSize: 9),
+                    reservedSize: 32,
+                    interval: 25,
+                    getTitlesWidget: (value, _) => Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(
+                        '${value.toInt()}',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 9),
+                      ),
                     ),
                   ),
                 ),
+                // X axis: show every label, all white
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 22,
+                    // interval = 1 so every point gets a label
+                    interval: 1,
                     getTitlesWidget: (value, meta) {
                       final idx = value.toInt();
                       if (idx < 0 || idx >= pts.length) {
                         return const SizedBox.shrink();
                       }
-                      final label       = pts[idx].xLabel;
-                      final isNewSess   = label.startsWith('●');
-                      final displayText = isNewSess
-                          ? label.substring(1) // strip bullet for axis text
-                          : label;
+                      final pt           = pts[idx];
+                      final isNewSession = pt.isSessionStart;
                       return Text(
-                        displayText,
+                        pt.xLabel, // always unique e.g. S1, S2, S3, S4
                         style: TextStyle(
-                          color: isNewSess
+                          // New session start: exercise colour; others: white54
+                          color: isNewSession
                               ? widget.colour
-                              : Colors.white38,
+                              : Colors.white54,
                           fontSize: 9,
-                          fontWeight: isNewSess
+                          fontWeight: isNewSession
                               ? FontWeight.w800
-                              : FontWeight.w400,
+                              : FontWeight.w500,
                         ),
                       );
                     },
@@ -716,13 +746,15 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   getTooltipItems: (touchedSpots) =>
                       touchedSpots.map((s) {
                         final idx = s.x.toInt();
+                        if (idx < 0 || idx >= pts.length) return null;
                         final pt  = pts[idx];
                         return LineTooltipItem(
-                          'Set ${pt.setNumber}  ${pt.score.toInt()}%',
+                          // Show local set number (within day) in tooltip
+                          'Session ${pt.sessionIndex + 1} · Set ${pt.setNumber}\n${pt.score.toInt()}% form',
                           TextStyle(
                             color: widget.colour,
                             fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         );
                       }).toList(),
@@ -738,13 +770,19 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   dotData: FlDotData(
                     show: true,
                     getDotPainter: (spot, _, __, ___) {
-                      final idx       = spot.x.toInt();
-                      final isNewSess = pts[idx].xLabel.startsWith('●');
+                      final idx          = spot.x.toInt();
+                      final isNewSession = idx >= 0 && idx < pts.length
+                          ? pts[idx].isSessionStart
+                          : false;
                       return FlDotCirclePainter(
-                        radius:      isNewSess ? 6 : 4,
+                        // New session start: larger diamond-ish dot with ring
+                        // Regular dot: smaller filled circle
+                        radius:      isNewSession ? 6 : 4,
                         color:       widget.colour,
-                        strokeWidth: isNewSess ? 2.5 : 0,
-                        strokeColor: const Color(0xFF111111),
+                        strokeWidth: isNewSession ? 2.5 : 1,
+                        strokeColor: isNewSession
+                            ? const Color(0xFF111111)
+                            : widget.colour.withOpacity(0.4),
                       );
                     },
                   ),
@@ -754,7 +792,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                       begin: Alignment.topCenter,
                       end:   Alignment.bottomCenter,
                       colors: [
-                        widget.colour.withOpacity(0.18),
+                        widget.colour.withOpacity(0.15),
                         widget.colour.withOpacity(0.0),
                       ],
                     ),
@@ -765,23 +803,89 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
-        // Best score footer — coloured to match the exercise line
-        Text(
-          'Best set: ${bestScore.toInt()}% form score',
-          style: TextStyle(
-            color: widget.colour,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
+        // Stats row: average + best, both in exercise colour
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: widget.colour.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: widget.colour.withOpacity(0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AVERAGE SET',
+                      style: TextStyle(
+                        color: widget.colour.withOpacity(0.6),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${avgScore.toInt()}%',
+                      style: TextStyle(
+                        color: widget.colour,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: widget.colour.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: widget.colour.withOpacity(0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'BEST SET',
+                      style: TextStyle(
+                        color: widget.colour.withOpacity(0.6),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${bestScore.toInt()}%',
+                      style: TextStyle(
+                        color: widget.colour,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
   Widget _buildSessionLegend(List<SetTrendPoint> pts) {
-    // Collect distinct session groups with their date
     final Map<int, DateTime> groups = {};
     for (final pt in pts) {
       groups.putIfAbsent(pt.sessionIndex, () => pt.timestamp);
@@ -807,10 +911,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           spacing: 8,
           runSpacing: 8,
           children: groups.entries.map((entry) {
-            final idx  = entry.key;
-            final date = entry.value;
-            final now  = DateTime.now();
-            final day  = DateTime(date.year, date.month, date.day);
+            final idx   = entry.key;
+            final date  = entry.value;
+            final now   = DateTime.now();
+            final day   = DateTime(date.year, date.month, date.day);
             final today = DateTime(now.year, now.month, now.day);
             final diff  = today.difference(day).inDays;
 
@@ -827,8 +931,18 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               dateLabel = '${day.day} ${months[day.month - 1]}';
             }
 
+            // Find which global set numbers belong to this session
+            final setsInSession = pts
+                .where((p) => p.sessionIndex == idx)
+                .map((p) => p.xLabel)
+                .toList();
+            final rangeLabel = setsInSession.length == 1
+                ? setsInSession.first
+                : '${setsInSession.first}–${setsInSession.last}';
+
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: widget.colour.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(20),
@@ -836,7 +950,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     color: widget.colour.withOpacity(0.3)),
               ),
               child: Text(
-                'Session ${idx + 1} · $dateLabel',
+                'Session ${idx + 1} · $dateLabel · $rangeLabel',
                 style: TextStyle(
                   color: widget.colour.withOpacity(0.9),
                   fontSize: 11,
@@ -845,6 +959,108 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               ),
             );
           }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // ── How it works section ─────────────────────────────────────────────────
+  Widget _buildHowItWorks() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline,
+                  color: widget.colour.withOpacity(0.7), size: 14),
+              const SizedBox(width: 8),
+              const Text(
+                'HOW THIS WORKS',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _howItWorksRow(
+            icon: Icons.bar_chart_rounded,
+            colour: widget.colour,
+            title: 'Form Score',
+            body:
+                'Each set is scored using: reps ÷ (reps + form corrections) × 100. '
+                'A perfect set with zero corrections scores 100%. '
+                'The more the AI had to correct your form, the lower the score.',
+          ),
+          const SizedBox(height: 10),
+          _howItWorksRow(
+            icon: Icons.timeline_rounded,
+            colour: widget.colour,
+            title: 'Set Numbering',
+            body:
+                'Sets are numbered globally across all time — S1, S2, S3 … '
+                'so every point on the chart is unique. '
+                'The dashed vertical line marks where a new workout day begins.',
+          ),
+          const SizedBox(height: 10),
+          _howItWorksRow(
+            icon: Icons.block_rounded,
+            colour: widget.colour,
+            title: 'What\'s Filtered Out',
+            body:
+                'Positioning messages like "step closer" or "centre yourself" '
+                'are excluded from the score — only genuine form feedback '
+                'counts against you.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _howItWorksRow({
+    required IconData icon,
+    required Color colour,
+    required String title,
+    required String body,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: colour.withOpacity(0.5), size: 14),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '$title  ',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                TextSpan(
+                  text: body,
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -930,7 +1146,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
     final today = DateTime(now.year, now.month, now.day);
     final Map<String, List<WorkoutSession>> groups = {};
     for (final s in sessions) {
-      final d    = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
+      final d    = DateTime(
+          s.timestamp.year, s.timestamp.month, s.timestamp.day);
       final diff = today.difference(d).inDays;
       final String label;
       if (diff == 0) {
@@ -998,7 +1215,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
           mainAxisSize: MainAxisSize.max,
           children: [
 
-            // ── Header with trend chart button ────────────────────────────
+            // ── Header with trend button ──────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
               child: Row(
@@ -1028,7 +1245,6 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                     ),
                   ),
                   const Spacer(),
-                  // ── Trend chart button ────────────────────────────────
                   GestureDetector(
                     onTap: widget.onTrendTap,
                     child: Container(
@@ -1062,7 +1278,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Strip ────────────────────────────────────────────────────
+            // ── Strip ─────────────────────────────────────────────────────
             SizedBox(
               height: 100,
               child: AnimatedSwitcher(
@@ -1136,14 +1352,14 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                       Text(
                                         'Tap to view',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.3),
+                                          color:
+                                              Colors.white.withOpacity(0.3),
                                           fontSize: 10,
                                         ),
                                       ),
                                       const SizedBox(width: 2),
                                       Icon(Icons.chevron_right,
-                                          color:
-                                              Colors.white.withOpacity(0.3),
+                                          color: Colors.white.withOpacity(0.3),
                                           size: 12),
                                     ],
                                   ),
@@ -1177,7 +1393,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isExpanded
-                                    ? const Color(0xFFFF5E00).withOpacity(0.15)
+                                    ? const Color(0xFFFF5E00)
+                                        .withOpacity(0.15)
                                     : const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
@@ -1243,7 +1460,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
               ),
             ),
 
-            // ── Expanded debrief panel ────────────────────────────────────
+            // ── Debrief panel ─────────────────────────────────────────────
             if (widget.expandedSession != null)
               Expanded(
                 child: SingleChildScrollView(
@@ -1339,7 +1556,8 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFB9FF2B).withOpacity(0.1),
+                              color: const Color(0xFFB9FF2B)
+                                  .withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                   color: const Color(0xFFB9FF2B)
@@ -1519,8 +1737,7 @@ class _CardDeckState extends State<_CardDeck> {
                   color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)),
           style: TextButton.styleFrom(
             backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
           ),
