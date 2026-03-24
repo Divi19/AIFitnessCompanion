@@ -243,7 +243,7 @@ class WorkoutSessionService {
         .doc(uid)
         .collection('workout_sessions')
         .orderBy('timestamp', descending: true)
-        .limit(20)
+        .limit(100)
         .snapshots()
         .map((snap) => snap.docs.map(WorkoutSession.fromFirestore).toList());
   }
