@@ -94,6 +94,7 @@ class QuickPoseActivity : ComponentActivity() {
 
     private val jointAngles = mutableListOf<Float>()
     private var repAngleCaptured = false
+    private var currentRepMinAngle: Float? = null
 
     private lateinit var repCountText:  TextView
     private lateinit var feedbackText:  TextView
@@ -270,6 +271,7 @@ class QuickPoseActivity : ComponentActivity() {
         counter.reset()
         jointAngles.clear()
         repAngleCaptured = false
+        currentRepMinAngle = null
     }
 
     private fun broadcastSessionIfValid() {
@@ -548,16 +550,25 @@ class QuickPoseActivity : ComponentActivity() {
                                     val counterValue = result.value
                                     isAtProperDepth  = counterValue <= DEPTH_THRESHOLD
 
-                                    if (counterValue <= DEPTH_THRESHOLD && !repAngleCaptured) {
+                                    if (counterValue <= DEPTH_THRESHOLD) {
                                         val angle = captureRepAngle(exerciseName, poseList)
                                         if (angle != null) {
-                                            jointAngles.add(angle)
-                                            println("=== ANGLE CAPTURE: exercise=$exerciseName angle=$angle° total=${jointAngles.size} ===")
+                                            // Keep updating with the smallest angle seen —
+                                            // smallest = most bent = deepest point of rep
+                                            if (currentRepMinAngle == null || angle < currentRepMinAngle!!) {
+                                                currentRepMinAngle = angle
+                                            }
                                         }
                                         repAngleCaptured = true
                                     }
-                                    if (counterValue > DEPTH_THRESHOLD) {
-                                        repAngleCaptured = false
+                                    if (counterValue > DEPTH_THRESHOLD && repAngleCaptured) {
+                                        // Rising back up — commit the deepest angle captured
+                                        if (currentRepMinAngle != null) {
+                                            jointAngles.add(currentRepMinAngle!!)
+                                            println("=== ANGLE CAPTURE: exercise=$exerciseName angle=$currentRepMinAngle° total=${jointAngles.size} ===")
+                                        }
+                                        currentRepMinAngle = null
+                                        repAngleCaptured   = false
                                     }
 
                                     if (!hasRequiredFormIssue) {
