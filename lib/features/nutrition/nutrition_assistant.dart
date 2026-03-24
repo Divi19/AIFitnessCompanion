@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/rag_service.dart';
 import '../../services/workout_session_service.dart';
 
-// ── Per-exercise colour palette ───────────────────────────────────────────
 const Map<String, Color> _exerciseColours = {
   'squat':        Color(0xFFFF5E00),
   'pushup':       Color(0xFFB9FF2B),
@@ -496,13 +495,22 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Compute avg angle across all sets that have data
+    // ── Angle data ────────────────────────────────────────────────────────
+    // anglePoints: all sets that have landmark data
+    // latestAngle: most recent set with data → the bright actionable tick
+    // allTimeAvg:  average across all sets → the faded historical tick
+    //              only shown when there are 2+ data points so it's meaningful
     final anglePoints = _points
         ?.where((p) => p.avgJointAngle != null)
         .toList() ?? [];
-    final overallAvgAngle = anglePoints.isNotEmpty
+
+    final double? latestAngle = anglePoints.isNotEmpty
+        ? anglePoints.last.avgJointAngle
+        : null;
+
+    final double? allTimeAvg = anglePoints.length > 1
         ? anglePoints.map((p) => p.avgJointAngle!).reduce((a, b) => a + b) /
-            anglePoints.length
+              anglePoints.length
         : null;
 
     return DraggableScrollableSheet(
@@ -518,7 +526,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
-            // Drag handle
             Center(
               child: Container(
                 width: 40, height: 4,
@@ -530,7 +537,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               ),
             ),
 
-            // Header
             Row(
               children: [
                 Container(
@@ -605,17 +611,17 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
               _buildSessionLegend(_points!),
 
             // ── Joint angle comparison ────────────────────────────────────
-            // Only shown for exercises that have ideal angle data AND where
-            // at least one session has landmark data.
-            if (overallAvgAngle != null &&
+            // Shown when we have at least one angle reading AND the exercise
+            // has an ideal range defined. Shows two ticks:
+            //   bright = latest session (actionable)
+            //   faded  = all-time average (context), only if 2+ data points
+            if (latestAngle != null &&
                 kIdealAngles.containsKey(widget.exercise)) ...[
               const SizedBox(height: 24),
-              _buildAngleComparison(overallAvgAngle),
+              _buildAngleComparison(latestAngle, allTimeAvg),
             ],
 
             const SizedBox(height: 24),
-
-            // ── How it works ──────────────────────────────────────────────
             _buildHowItWorks(),
           ],
         ),
@@ -790,7 +796,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
         const SizedBox(height: 12),
 
-        // Stats row: average + best
         Row(
           children: [
             Expanded(
@@ -959,27 +964,22 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     );
   }
 
-  // ── Joint angle comparison widget ────────────────────────────────────────
-  // Shows a horizontal range bar comparing the user's average joint angle
-  // against the biomechanically ideal range for this exercise.
-  //
-  // The bar spans 0° → scale° (e.g. 0–180°).
-  // The ideal zone is highlighted in green.
-  // The user's angle is a coloured tick — green if inside, orange if outside.
-  // A plain-English status line below explains the result.
-  Widget _buildAngleComparison(double userAngle) {
+  // ── Joint angle comparison — dual tick ───────────────────────────────────
+  // latestAngle : angle from the most recent set (bright tick — act on this)
+  // allTimeAvg  : average across all sets (faded tick — context only)
+  //               null when there is only one data point
+  Widget _buildAngleComparison(double latestAngle, double? allTimeAvg) {
     final ideal = kIdealAngles[widget.exercise]!;
-    final isInIdealRange = userAngle >= ideal.min && userAngle <= ideal.max;
+    final isInIdealRange = latestAngle >= ideal.min && latestAngle <= ideal.max;
 
-    // How far off is the user? Used for the status message.
     final double deviation;
     final String direction;
-    if (userAngle < ideal.min) {
-      deviation = ideal.min - userAngle;
-      direction = 'too acute'; // angle too small = going too deep / bending too much
-    } else if (userAngle > ideal.max) {
-      deviation = userAngle - ideal.max;
-      direction = 'too shallow'; // angle too large = not going deep enough
+    if (latestAngle < ideal.min) {
+      deviation = ideal.min - latestAngle;
+      direction = 'too acute';
+    } else if (latestAngle > ideal.max) {
+      deviation = latestAngle - ideal.max;
+      direction = 'too shallow';
     } else {
       deviation = 0;
       direction = '';
@@ -994,10 +994,12 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       statusText = 'Your depth is within the ideal range — great work.';
     } else if (direction == 'too shallow') {
       statusText =
-          'You\'re ${deviation.toStringAsFixed(0)}° too shallow — try to go ${deviation > 20 ? 'significantly' : 'slightly'} deeper next set.';
+          'You\'re ${deviation.toStringAsFixed(0)}° too shallow — try to go '
+          '${deviation > 20 ? 'significantly' : 'slightly'} deeper next set.';
     } else {
       statusText =
-          'You\'re going ${deviation.toStringAsFixed(0)}° past the ideal range — ease off depth slightly to protect your joints.';
+          'You\'re going ${deviation.toStringAsFixed(0)}° past the ideal range '
+          '— ease off depth slightly to protect your joints.';
     }
 
     return Container(
@@ -1005,8 +1007,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: tickColour.withOpacity(0.3)),
+        border: Border.all(color: tickColour.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1035,16 +1036,19 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Range bar
+          // Range bar with two ticks
           LayoutBuilder(builder: (context, constraints) {
-            final totalWidth = constraints.maxWidth;
+            final totalWidth     = constraints.maxWidth;
             final idealStartFrac = ideal.min / ideal.scale;
             final idealEndFrac   = ideal.max / ideal.scale;
-            final userFrac       = (userAngle / ideal.scale).clamp(0.0, 1.0);
+            final latestFrac     = (latestAngle / ideal.scale).clamp(0.0, 1.0);
+            final avgFrac        = allTimeAvg != null
+                ? (allTimeAvg / ideal.scale).clamp(0.0, 1.0)
+                : null;
 
             return Column(
               children: [
-                // Labels: 0° on left, scale° on right
+                // Axis labels
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1060,23 +1064,23 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
                 // Bar stack
                 SizedBox(
-                  height: 20,
+                  height: 24,
                   child: Stack(
                     children: [
-                      // Full background track
+                      // Background track
                       Container(
                         height: 8,
-                        margin: const EdgeInsets.only(top: 6),
+                        margin: const EdgeInsets.only(top: 8),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                      // Ideal zone highlight (green)
+                      // Ideal zone (green)
                       Positioned(
                         left: totalWidth * idealStartFrac,
                         width: totalWidth * (idealEndFrac - idealStartFrac),
-                        top: 6,
+                        top: 8,
                         height: 8,
                         child: Container(
                           decoration: BoxDecoration(
@@ -1085,13 +1089,28 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                           ),
                         ),
                       ),
-                      // User's angle tick mark
+                      // All-time average tick — faded, thinner (context only)
+                      if (avgFrac != null)
+                        Positioned(
+                          left: (totalWidth * avgFrac - 1.0)
+                              .clamp(0.0, totalWidth - 2),
+                          top: 6,
+                          child: Container(
+                            width: 2,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: tickColour.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(1),
+                            ),
+                          ),
+                        ),
+                      // Latest session tick — bright, wider (act on this)
                       Positioned(
-                        left: (totalWidth * userFrac - 1.5)
-                            .clamp(0.0, totalWidth - 3),
-                        top: 2,
+                        left: (totalWidth * latestFrac - 2.0)
+                            .clamp(0.0, totalWidth - 4),
+                        top: 4,
                         child: Container(
-                          width: 3,
+                          width: 4,
                           height: 16,
                           decoration: BoxDecoration(
                             color: tickColour,
@@ -1102,12 +1121,12 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
 
-                // Angle labels below bar
+                // Legend row below bar
                 Row(
                   children: [
-                    // Ideal range label, positioned under the green zone
+                    // Ideal range label
                     SizedBox(width: totalWidth * idealStartFrac),
                     Flexible(
                       child: Text(
@@ -1120,14 +1139,28 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                       ),
                     ),
                     const Spacer(),
-                    // User's angle label, right-aligned
-                    Text(
-                      'Yours ${userAngle.toStringAsFixed(1)}°',
-                      style: TextStyle(
-                        color: tickColour,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    // Latest + avg labels on the right
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Latest ${latestAngle.toStringAsFixed(1)}°',
+                          style: TextStyle(
+                            color: tickColour,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (allTimeAvg != null)
+                          Text(
+                            'Avg ${allTimeAvg.toStringAsFixed(1)}°',
+                            style: TextStyle(
+                              color: tickColour.withOpacity(0.45),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -1139,7 +1172,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           const Divider(color: Colors.white10, height: 1),
           const SizedBox(height: 10),
 
-          // Status line
+          // Status line — based on latest only, not average
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1168,7 +1201,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     );
   }
 
-  // ── How it works section ──────────────────────────────────────────────────
   Widget _buildHowItWorks() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1212,9 +1244,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             colour: widget.colour,
             title: 'Joint Angle',
             body:
-                'Your average joint angle at the deepest point of each rep is '
-                'measured using MediaPipe pose landmarks and compared against '
-                'biomechanically ideal ranges from exercise science.',
+                'The bright tick shows your most recent session — that\'s what '
+                'to act on. The faded tick shows your all-time average for context. '
+                'Angles are measured at the deepest point of each rep using '
+                'MediaPipe pose landmarks.',
           ),
           const SizedBox(height: 10),
           _howItWorksRow(
