@@ -969,7 +969,8 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
   // allTimeAvg  : average across all sets (faded tick — context only)
   //               null when there is only one data point
   Widget _buildAngleComparison(double latestAngle, double? allTimeAvg) {
-    final ideal = kIdealAngles[widget.exercise]!;
+    final ideal          = kIdealAngles[widget.exercise]!;
+    final exerciseColour = widget.colour;
     final isInIdealRange = latestAngle >= ideal.min && latestAngle <= ideal.max;
 
     final double deviation;
@@ -985,9 +986,14 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       direction = '';
     }
 
-    final tickColour = isInIdealRange
-        ? const Color(0xFFB9FF2B)
-        : const Color(0xFFFF5E00);
+    // Latest tick: exercise colour when in range, white when out of range
+    // This makes clear that the exercise colour = your result
+    final latestTickColour = isInIdealRange
+        ? exerciseColour
+        : Colors.white;
+
+    // Average tick: always exercise colour at low opacity — clearly secondary
+    final avgTickColour = exerciseColour.withOpacity(0.35);
 
     final String statusText;
     if (isInIdealRange) {
@@ -1007,21 +1013,21 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: tickColour.withOpacity(0.3)),
+        border: Border.all(color: exerciseColour.withOpacity(0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header — uses exercise colour throughout
           Row(
             children: [
               Icon(Icons.straighten_rounded,
-                  color: tickColour.withOpacity(0.8), size: 14),
+                  color: exerciseColour.withOpacity(0.8), size: 14),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'JOINT ANGLE ANALYSIS',
                 style: TextStyle(
-                  color: Colors.white54,
+                  color: exerciseColour.withOpacity(0.7),
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.4,
@@ -1034,9 +1040,11 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             ideal.joint,
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Range bar with two ticks
+          // ── Two separate labelled rows, one per tick ───────────────────
+          // This makes it impossible to confuse them — each tick has its
+          // own bar row with its own label directly beneath it.
           LayoutBuilder(builder: (context, constraints) {
             final totalWidth     = constraints.maxWidth;
             final idealStartFrac = ideal.min / ideal.scale;
@@ -1046,7 +1054,42 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 ? (allTimeAvg / ideal.scale).clamp(0.0, 1.0)
                 : null;
 
+            // Shared background + ideal zone builder
+            Widget buildTrack({required Widget tick}) {
+              return SizedBox(
+                height: 20,
+                child: Stack(
+                  children: [
+                    // Background track
+                    Container(
+                      height: 6,
+                      margin: const EdgeInsets.only(top: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    // Ideal zone — exercise colour tinted
+                    Positioned(
+                      left: totalWidth * idealStartFrac,
+                      width: totalWidth * (idealEndFrac - idealStartFrac),
+                      top: 7,
+                      height: 6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: exerciseColour.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                    tick,
+                  ],
+                ),
+              );
+            }
+
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Axis labels
                 Row(
@@ -1055,124 +1098,131 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                     Text('0°',
                         style: const TextStyle(
                             color: Colors.white24, fontSize: 9)),
+                    Text('Ideal ${ideal.min.toInt()}–${ideal.max.toInt()}°',
+                        style: TextStyle(
+                            color: exerciseColour.withOpacity(0.6),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600)),
                     Text('${ideal.scale.toInt()}°',
                         style: const TextStyle(
                             color: Colors.white24, fontSize: 9)),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
 
-                // Bar stack
-                SizedBox(
-                  height: 24,
-                  child: Stack(
-                    children: [
-                      // Background track
-                      Container(
-                        height: 8,
-                        margin: const EdgeInsets.only(top: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                // ── Latest session row ──────────────────────────────────
+                buildTrack(
+                  tick: Positioned(
+                    left: (totalWidth * latestFrac - 2.5)
+                        .clamp(0.0, totalWidth - 5),
+                    top: 2,
+                    child: Container(
+                      width: 5,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: latestTickColour,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      // Ideal zone (green)
-                      Positioned(
-                        left: totalWidth * idealStartFrac,
-                        width: totalWidth * (idealEndFrac - idealStartFrac),
-                        top: 8,
-                        height: 8,
-                        child: Container(
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8, height: 8,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFB9FF2B).withOpacity(0.35),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      // All-time average tick — faded, thinner (context only)
-                      if (avgFrac != null)
-                        Positioned(
-                          left: (totalWidth * avgFrac - 1.0)
-                              .clamp(0.0, totalWidth - 2),
-                          top: 6,
-                          child: Container(
-                            width: 2,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: tickColour.withOpacity(0.35),
-                              borderRadius: BorderRadius.circular(1),
-                            ),
-                          ),
-                        ),
-                      // Latest session tick — bright, wider (act on this)
-                      Positioned(
-                        left: (totalWidth * latestFrac - 2.0)
-                            .clamp(0.0, totalWidth - 4),
-                        top: 4,
-                        child: Container(
-                          width: 4,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: tickColour,
+                            color: latestTickColour,
                             borderRadius: BorderRadius.circular(2),
                           ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Latest session',
+                          style: TextStyle(
+                            color: latestTickColour,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${latestAngle.toStringAsFixed(1)}°',
+                      style: TextStyle(
+                        color: latestTickColour,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // ── All-time average row (only if 2+ sessions) ──────────
+                if (avgFrac != null) ...[
+                  const SizedBox(height: 14),
+                  buildTrack(
+                    tick: Positioned(
+                      left: (totalWidth * avgFrac - 1.5)
+                          .clamp(0.0, totalWidth - 3),
+                      top: 4,
+                      child: Container(
+                        width: 3,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: avgTickColour,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(
+                              color: avgTickColour,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'All-time average',
+                            style: TextStyle(
+                              color: avgTickColour,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${allTimeAvg!.toStringAsFixed(1)}°',
+                        style: TextStyle(
+                          color: avgTickColour,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 8),
-
-                // Legend row below bar
-                Row(
-                  children: [
-                    // Ideal range label
-                    SizedBox(width: totalWidth * idealStartFrac),
-                    Flexible(
-                      child: Text(
-                        'Ideal ${ideal.min.toInt()}–${ideal.max.toInt()}°',
-                        style: const TextStyle(
-                          color: Color(0xFFB9FF2B),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    // Latest + avg labels on the right
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          'Latest ${latestAngle.toStringAsFixed(1)}°',
-                          style: TextStyle(
-                            color: tickColour,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (allTimeAvg != null)
-                          Text(
-                            'Avg ${allTimeAvg.toStringAsFixed(1)}°',
-                            style: TextStyle(
-                              color: tickColour.withOpacity(0.45),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+                ],
               ],
             );
           }),
 
+          const SizedBox(height: 14),
+          Divider(color: exerciseColour.withOpacity(0.15), height: 1),
           const SizedBox(height: 12),
-          const Divider(color: Colors.white10, height: 1),
-          const SizedBox(height: 10),
 
-          // Status line — based on latest only, not average
+          // Status line
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1180,7 +1230,9 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 isInIdealRange
                     ? Icons.check_circle_outline_rounded
                     : Icons.info_outline_rounded,
-                color: tickColour,
+                color: isInIdealRange
+                    ? exerciseColour
+                    : Colors.white70,
                 size: 14,
               ),
               const SizedBox(width: 8),
