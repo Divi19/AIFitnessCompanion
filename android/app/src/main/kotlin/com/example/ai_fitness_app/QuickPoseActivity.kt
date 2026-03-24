@@ -359,7 +359,7 @@ class QuickPoseActivity : ComponentActivity() {
         if (magA == 0f || magC == 0f) return 180f
         return Math.toDegrees(
             acos((dot / (magA * magC)).toDouble().coerceIn(-1.0, 1.0))
-        ).toFloat()
+        ).toFloat() / 2f
     }
 
     private fun captureRepAngle(exercise: String, p: List<*>): Float? {
