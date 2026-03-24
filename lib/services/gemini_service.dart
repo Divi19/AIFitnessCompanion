@@ -73,36 +73,29 @@ class GeminiService {
 
 // ── MEAL CLASSIFICATION SERVICE ───────────────────────────────────────────────
 //
-// NEW FLOW (3 steps):
+// FLOW (3 steps):
 //
 //   Step 1 — FOOD VALIDATION (Gemini):
 //     Send image to Gemini and ask: "Is this food?"
-//     If NOT food → return { isFood: false } immediately.
-//     UI shows invalid state. Flow stops here.
+//     If NOT food → UI shows invalid state. Flow stops.
 //
 //   Step 2 — DISH IDENTIFICATION (Gemini):
-//     If it IS food, Gemini identifies:
-//       - dish name (English)
-//       - estimated grams based on visual cues
-//       - whether it's regional (USDA won't have it)
-//       - fallback macros for that gram weight
-//     Returns 3 candidates ranked by confidence.
+//     Identifies dish name, estimates grams, flags regional dishes,
+//     provides fallback macros. Returns 3 candidates by confidence.
+//     No example dish names in prompt — avoids biasing the model.
 //
 //   Step 3 — NUTRITION LOOKUP (meal_service.dart):
-//     For each candidate:
-//       a. Search USDA FoodData Central by dish name
-//       b. Found → use USDA per-100g macros × (grams / 100) ← most accurate
-//       c. Not found (regional) → use Gemini's fallback macros
-//     User sees gram input pre-filled with Gemini's estimate, can adjust.
-//     All macros recalculate live.
+//     USDA lookup by dish name → found: real macros × grams
+//     Not found (regional) → Gemini fallback macros
+//     If all candidates < 0.35 confidence → treated as unidentifiable.
 // ─────────────────────────────────────────────────────────────────────────────
 class MealGeminiService {
 
-  // ── STEP 1: VALIDATE — is this actually a food image? ─────────────────────
+  // ── STEP 1: VALIDATE ──────────────────────────────────────────────────────
+  // Is this actually a food image?
   // Called FIRST before any nutrition lookup.
-  // Returns true if the image contains food, false otherwise.
-  // This prevents nonsense results when users photograph themselves,
-  // their gym equipment, pets, scenery, etc.
+  // Returns true if food/beverage, false otherwise.
+  // On network error → returns true so user isn't blocked.
   Future<bool> validateFoodImage(List<int> imageBytes) async {
     const prompt = '''
 Look at this image carefully.
@@ -139,19 +132,25 @@ A glass of water is FOOD. A running shoe is NOT_FOOD.
       if (response.statusCode != 200) return false;
 
       final data = jsonDecode(response.body);
-      final text = (data['candidates']?[0]?['content']?['parts']?[0]?['text'] as String? ?? '').trim().toUpperCase();
+      final text = (data['candidates']?[0]?['content']?['parts']?[0]?['text'] as String? ?? '')
+          .trim()
+          .toUpperCase();
       print('Food validation result: "$text"');
       return text.contains('FOOD') && !text.contains('NOT_FOOD');
 
     } catch (e) {
       print('validateFoodImage error: $e');
-      // On network error, assume food so the user isn't blocked
-      return true;
+      return true; // Network error → don't block user
     }
   }
 
   // ── STEP 2: IDENTIFY DISH + ESTIMATE GRAMS ────────────────────────────────
   // Called only after validateFoodImage() returns true.
+  //
+  // IMPORTANT: No example dish names anywhere in the prompt.
+  // Example names bias Gemini toward guessing those dishes
+  // even when the image shows something completely different.
+  //
   // Returns 3 candidates each with:
   //   name, estimated_grams, confidence (0.0–1.0), is_regional,
   //   fallback_calories/protein/carbs/fat (for that gram weight),
@@ -160,40 +159,73 @@ A glass of water is FOOD. A running shoe is NOT_FOOD.
     const prompt = '''
 You are a professional nutritionist and food recognition AI.
 
-Look at this meal photo carefully and analyse:
-1. What dish is this?
-2. Estimate the weight in grams by looking at:
-   - Plate/bowl size (standard dinner plate ≈ 26cm holds 400–600g of food)
-   - Food depth and density (rice is denser than salad)
-   - Any visible reference objects (spoon, fork, hand, cup)
-3. Is this dish in the USDA FoodData Central database?
-   USDA has: standard Western/American foods, raw ingredients, packaged foods.
-   USDA does NOT have: Malaysian, Indonesian, Thai, Indian, Middle Eastern, African dishes.
+Analyse this food photo carefully and do the following:
+
+STEP 1 — IDENTIFY: What food or dish is shown in THIS specific image?
+  - Look only at what is visible in the image
+  - Do NOT assume or guess a dish that is not clearly visible
+  - If the image is blurry, unclear, or the food cannot be confidently identified,
+    set confidence below 0.40 and name it "Unidentified food"
+
+STEP 2 — ESTIMATE WEIGHT: How many grams of food are on the plate/bowl?
+  - Standard dinner plate (26cm) typically holds 400–600g of food
+  - Small bowl typically holds 200–350g
+  - Judge by food depth, density, and any visible reference objects
+
+STEP 3 — CLASSIFY: Is this dish in the USDA FoodData Central database?
+  - USDA has: Western/American foods, raw ingredients, packaged foods
+  - USDA does NOT have: Malaysian, Indonesian, Thai, Indian, Middle Eastern,
+    African, or other regional/local cuisine dishes
 
 Return ONLY a raw JSON array — no markdown, no backticks, no explanation.
-Exactly 3 candidates ranked from most to least likely:
+Return exactly 3 candidates ranked from most to least confident.
 
+JSON format (fill in based on what YOU actually see in the image):
 [
   {
-    "name": "exact dish name in English",
-    "estimated_grams": 350,
-    "confidence": 0.88,
-    "is_regional": true,
-    "fallback_calories": 620,
-    "fallback_protein": 18.5,
-    "fallback_carbs": 72.0,
-    "fallback_fat": 28.0,
-    "portion_reasoning": "Standard nasi lemak on medium plate, rice ~200g, sides ~150g"
+    "name": "name of what you actually see in the image",
+    "estimated_grams": 300,
+    "confidence": 0.85,
+    "is_regional": false,
+    "fallback_calories": 500,
+    "fallback_protein": 20.0,
+    "fallback_carbs": 60.0,
+    "fallback_fat": 15.0,
+    "portion_reasoning": "describe what you see and how you estimated the weight"
+  },
+  {
+    "name": "second most likely identification",
+    "estimated_grams": 300,
+    "confidence": 0.60,
+    "is_regional": false,
+    "fallback_calories": 480,
+    "fallback_protein": 18.0,
+    "fallback_carbs": 58.0,
+    "fallback_fat": 14.0,
+    "portion_reasoning": "alternative identification reason"
+  },
+  {
+    "name": "third most likely identification",
+    "estimated_grams": 300,
+    "confidence": 0.30,
+    "is_regional": false,
+    "fallback_calories": 460,
+    "fallback_protein": 16.0,
+    "fallback_carbs": 55.0,
+    "fallback_fat": 13.0,
+    "portion_reasoning": "third alternative reason"
   }
 ]
 
-STRICT RULES:
-- estimated_grams: specific number (e.g. 320, not 300) based on what you see
-- confidence: float 0.0–1.0, NOT a string like "High"
-- is_regional: true for any non-Western/non-American cuisine
-- fallback_calories/protein/carbs/fat: macros for the EXACT estimated_grams weight — NOT per 100g
-- portion_reasoning: one sentence explaining your gram estimate
-- ALL numeric values must be numbers, never strings
+STRICT RULES — follow every one:
+- "name": identify from the IMAGE ONLY — do not default to any specific dish
+- "estimated_grams": a specific number based on what you actually see
+- "confidence": float 0.0–1.0, NOT a string. Be honest — if unclear, use a low value
+- "is_regional": true for non-Western/non-American cuisine
+- "fallback_calories/protein/carbs/fat": macros for that EXACT gram weight, NOT per 100g
+- "portion_reasoning": describe what you visually see to justify the gram estimate
+- ALL numeric values must be actual numbers, never strings
+- If food is completely unidentifiable, return 3 candidates all with confidence < 0.40
 ''';
 
     try {
@@ -218,7 +250,9 @@ STRICT RULES:
         }),
       );
 
-      if (response.statusCode != 200) throw Exception('Meal API error ${response.statusCode}');
+      if (response.statusCode != 200) {
+        throw Exception('Meal API error ${response.statusCode}: ${response.body}');
+      }
 
       final data    = jsonDecode(response.body);
       final rawText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] as String? ?? '';
@@ -231,34 +265,39 @@ STRICT RULES:
 
       final s = cleaned.indexOf('[');
       final e = cleaned.lastIndexOf(']');
-      if (s == -1 || e == -1) throw Exception('No JSON array in Gemini response: $cleaned');
+      if (s == -1 || e == -1) {
+        throw Exception('No JSON array in Gemini response: $cleaned');
+      }
 
       final parsed = jsonDecode(cleaned.substring(s, e + 1)) as List;
       return parsed.cast<Map<String, dynamic>>();
 
     } catch (e) {
       print('classifyMealWithGrams error: $e');
+      // Return zero-confidence fallback — meal_tracker_screen will detect
+      // this as unidentifiable and show the invalid state
       return [_fallbackCandidate()];
     }
   }
 
   // ── FALLBACK ───────────────────────────────────────────────────────────────
-  // Used only when Gemini call fails entirely (network error, bad JSON).
-  // Per-100g values included so gram adjustments in the card still work.
+  // Used ONLY when the API call fails entirely (network error, bad JSON).
+  // confidence: 0.0 → meal_tracker_screen treats this as unidentifiable
+  // and shows the invalid image state instead of a wrong suggestion.
   Map<String, dynamic> _fallbackCandidate() => {
-    'name'              : 'Unknown dish',
+    'name'              : 'Unidentified food',
     'estimated_grams'   : 200,
-    'confidence'        : 0.3,
+    'confidence'        : 0.0,
     'is_regional'       : false,
-    'fallback_calories' : 400,
-    'fallback_protein'  : 15.0,
-    'fallback_carbs'    : 50.0,
-    'fallback_fat'      : 12.0,
-    'portion_reasoning' : 'Could not analyse image',
-    'cal_per_100g'      : 200.0,
-    'prot_per_100g'     : 7.5,
-    'carb_per_100g'     : 25.0,
-    'fat_per_100g'      : 6.0,
-    'source'            : 'Gemini estimate',
+    'fallback_calories' : 0,
+    'fallback_protein'  : 0.0,
+    'fallback_carbs'    : 0.0,
+    'fallback_fat'      : 0.0,
+    'portion_reasoning' : 'API call failed — could not analyse image',
+    'cal_per_100g'      : 0.0,
+    'prot_per_100g'     : 0.0,
+    'carb_per_100g'     : 0.0,
+    'fat_per_100g'      : 0.0,
+    'source'            : 'Error',
   };
 }
