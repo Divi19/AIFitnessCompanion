@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 
-// Represents a completed workout session
 class WorkoutSession {
   final String id;
   final String exercise;
@@ -14,10 +13,6 @@ class WorkoutSession {
   final Map<String, int> feedbackMap;
   final String debriefText;
   final DateTime timestamp;
-  // Average joint angle at the bottom of each rep during this session.
-  // Squat/lunge: hip-knee-ankle angle in degrees.
-  // Push-up: shoulder-elbow-wrist angle in degrees.
-  // null means landmarks were not visible enough to capture data.
   final double? avgJointAngle;
 
   WorkoutSession({
@@ -31,7 +26,6 @@ class WorkoutSession {
     this.avgJointAngle,
   });
 
-  // ── Form quality score ───────────────────────────────────────────────────
   double get formScore {
     if (reps == 0) return 10.0;
     final totalFeedback = feedbackMap.values.fold(0, (a, b) => a + b);
@@ -80,31 +74,34 @@ class WorkoutSession {
   factory WorkoutSession.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final rawFeedback = data['feedbackMap'] as Map<String, dynamic>? ?? {};
-    // avgJointAngle is optional — older sessions won't have it
     final rawAngle = data['avgJointAngle'];
-    final avgAngle = rawAngle != null ? (rawAngle as num).toDouble() : null;
+
+    // ── FIX: treat -1.0 sentinel (no landmarks captured) as null ──────────
+    double? avgAngle;
+    if (rawAngle != null) {
+      final v = (rawAngle as num).toDouble();
+      avgAngle = (v < 0) ? null : v;
+    }
+
     return WorkoutSession(
-      id:             doc.id,
-      exercise:       data['exercise']    ?? '',
-      reps:           data['reps']        ?? 0,
-      durationMs:     data['durationMs']  ?? 0,
-      feedbackMap:    rawFeedback.map((k, v) => MapEntry(k, (v as num).toInt())),
-      debriefText:    data['debriefText'] ?? '',
-      timestamp:      (data['timestamp'] as Timestamp).toDate(),
-      avgJointAngle:  avgAngle,
+      id:            doc.id,
+      exercise:      data['exercise']    ?? '',
+      reps:          data['reps']        ?? 0,
+      durationMs:    data['durationMs']  ?? 0,
+      feedbackMap:   rawFeedback.map((k, v) => MapEntry(k, (v as num).toInt())),
+      debriefText:   data['debriefText'] ?? '',
+      timestamp:     (data['timestamp'] as Timestamp).toDate(),
+      avgJointAngle: avgAngle,
     );
   }
 }
 
-// ── Ideal angle ranges per exercise ─────────────────────────────────────
-// These are the biomechanically ideal joint angles at the deepest point
-// of each rep, based on standard exercise science references.
-// Used by the angle comparison visualisation in the trend chart sheet.
+// ── Ideal angle ranges per exercise ──────────────────────────────────────
 class IdealAngleRange {
-  final double min;   // minimum ideal angle (degrees)
-  final double max;   // maximum ideal angle (degrees)
-  final double scale; // full axis range for the visualisation bar
-  final String joint; // human-readable joint description
+  final double min;
+  final double max;
+  final double scale;
+  final String joint;
 
   const IdealAngleRange({
     required this.min,
@@ -144,7 +141,7 @@ class SetTrendPoint {
   final String xLabel;
   final DateTime timestamp;
   final int reps;
-  final double? avgJointAngle; // may be null if landmarks were not visible
+  final double? avgJointAngle;
 
   const SetTrendPoint({
     required this.sessionId,
@@ -163,16 +160,25 @@ class SetTrendPoint {
 class WorkoutSessionService {
   final _db = FirebaseFirestore.instance;
 
-  // ── Save session + generate debrief ─────────────────────────────────────
+  // ── Save session + generate debrief ──────────────────────────────────────
+  // avgJointAngle: pass the raw float from the broadcast.
+  // Values < 0 (the Kotlin -1f sentinel) are treated as "no data" and not saved.
   Future<WorkoutSession?> saveSession({
     required String exercise,
     required int reps,
     required int durationMs,
     required Map<String, int> feedbackMap,
-    double? avgJointAngle, // null-safe — older saves without angle still work
+    double? avgJointAngle,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
+
+    // ── FIX: normalise sentinel before writing ────────────────────────────
+    final double? angleToSave =
+        (avgJointAngle != null && avgJointAngle >= 0) ? avgJointAngle : null;
+
+    debugPrint('=== SAVE SESSION: exercise=$exercise reps=$reps '
+        'angle=$avgJointAngle → stored=$angleToSave ===');
 
     try {
       final userDoc  = await _db.collection('users').doc(uid).get();
@@ -194,9 +200,9 @@ class WorkoutSessionService {
         'debriefText': debriefText,
         'timestamp':   FieldValue.serverTimestamp(),
       };
-      // Only write avgJointAngle when we actually have data
-      if (avgJointAngle != null) {
-        docData['avgJointAngle'] = avgJointAngle;
+
+      if (angleToSave != null) {
+        docData['avgJointAngle'] = angleToSave;
       }
 
       final docRef = await _db
@@ -213,7 +219,6 @@ class WorkoutSessionService {
     }
   }
 
-  // ── Fetch recent sessions (for assistant context injection) ──────────────
   Future<List<WorkoutSession>> getRecentSessions({int limit = 3}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
@@ -229,7 +234,6 @@ class WorkoutSessionService {
     return snapshot.docs.map(WorkoutSession.fromFirestore).toList();
   }
 
-  // ── Stream all sessions (for history list in assistant screen) ───────────
   Stream<List<WorkoutSession>> sessionsStream() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return const Stream.empty();
@@ -244,7 +248,6 @@ class WorkoutSessionService {
         .map((snap) => snap.docs.map(WorkoutSession.fromFirestore).toList());
   }
 
-  // ── Distinct exercises that have at least one session ────────────────────
   Future<List<String>> getExercisesWithSessions() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
@@ -271,7 +274,6 @@ class WorkoutSessionService {
     return order;
   }
 
-  // ── Per-set trend for a specific exercise ────────────────────────────────
   Future<List<SetTrendPoint>> getSetTrendForExercise(String exercise) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
@@ -290,11 +292,11 @@ class WorkoutSessionService {
         .toList()
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    final points      = <SetTrendPoint>[];
+    final points     = <SetTrendPoint>[];
     DateTime? lastDay;
-    int localSetNum   = 0;
-    int sessionIndex  = -1;
-    int globalIdx     = 0;
+    int localSetNum  = 0;
+    int sessionIndex = -1;
+    int globalIdx    = 0;
 
     for (final s in sessions) {
       final day      = DateTime(s.timestamp.year, s.timestamp.month, s.timestamp.day);
@@ -328,7 +330,6 @@ class WorkoutSessionService {
     return points;
   }
 
-  // ── Generate debrief via Gemini ──────────────────────────────────────────
   Future<String> _generateDebrief({
     required String exercise,
     required int reps,
