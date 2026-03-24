@@ -348,8 +348,9 @@ class QuickPoseActivity : ComponentActivity() {
         bx: Float, by: Float, bz: Float,
         cx: Float, cy: Float, cz: Float
     ): Float {
-        val abx = ax - bx; val aby = ay - by; val abz = az - bz
-        val cbx = cx - bx; val cby = cy - by; val cbz = cz - bz
+        val zScale = 3.0f
+        val abx = ax - bx; val aby = ay - by; val abz = (az - bz) * zScale
+        val cbx = cx - bx; val cby = cy - by; val cbz = (cz - bz) * zScale
         val dot  = abx * cbx + aby * cby + abz * cbz
         val magA = sqrt(abx * abx + aby * aby + abz * abz)
         val magC = sqrt(cbx * cbx + cby * cby + cbz * cbz)
