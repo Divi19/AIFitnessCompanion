@@ -100,7 +100,7 @@ class QuickPoseActivity : ComponentActivity() {
     private lateinit var exerciseLabel: TextView
     private lateinit var repContainer:  LinearLayout
 
-    data class LM(val x: Float, val y: Float, val visibility: Float)
+    data class LM(val x: Float, val y: Float, val z: Float, val visibility: Float)
 
     private fun extractLM(obj: Any?): LM? {
         if (obj == null) return null
@@ -115,15 +115,16 @@ class QuickPoseActivity : ComponentActivity() {
 
             val x = getFloat("x") ?: return null
             val y = getFloat("y") ?: return null
+            val z = getFloat("z") ?: 0f
             val v = getFloat("visibility") ?: 1f
-            LM(x, y, v)
+            LM(x, y, z, v)
         } catch (_: Exception) { null }
     }
 
     private fun lm(list: List<*>, index: Int): LM? {
         if (index >= list.size) return null
         val raw = extractLM(list[index]) ?: return null
-        return if (raw.visibility < 0.5f) null else raw
+        return if (raw.visibility < 0.7f) null else raw
     }
 
     private fun getPoseLandmarks(landmarks: Any?): List<*> {
@@ -335,31 +336,25 @@ class QuickPoseActivity : ComponentActivity() {
         }
     }
 
-    // ── Aspect-ratio-corrected angle ──────────────────────────────────────
-    // MediaPipe landmarks are normalised to [0,1] in both axes, but the camera
-    // frame is portrait (9:16), so a unit step in x covers ~1.78x more real-world
-    // distance than a unit step in y. Without correction every angle is skewed
-    // because the x vectors are artificially compressed relative to y.
-    // We scale x by the aspect ratio (height/width = 16/9 ≈ 1.778) so both axes
-    // represent equal real-world distances before computing the dot product.
-    private val ASPECT_RATIO = 16f / 9f  // portrait phone, front camera
-
+    // ── 3D angle calculation ──────────────────────────────────────────────
+    // Uses full X/Y/Z coordinates so the angle is correct regardless of
+    // whether the user faces the camera straight-on or at an angle.
+    // MediaPipe provides Z as a depth estimate from a monocular camera —
+    // less precise than X/Y but far better than ignoring it entirely.
     private fun angleDeg(
-        ax: Float, ay: Float,
-        bx: Float, by: Float,
-        cx: Float, cy: Float
+        ax: Float, ay: Float, az: Float,
+        bx: Float, by: Float, bz: Float,
+        cx: Float, cy: Float, cz: Float
     ): Float {
-        // Scale x coordinates to correct for non-square normalised space
-        val axS = ax * ASPECT_RATIO; val bxS = bx * ASPECT_RATIO; val cxS = cx * ASPECT_RATIO
-        val abx = axS - bxS; val aby = ay - by
-        val cbx = cxS - bxS; val cby = cy - by
-        val dot  = abx * cbx + aby * cby
-        val magA = sqrt(abx * abx + aby * aby)
-        val magC = sqrt(cbx * cbx + cby * cby)
+        val abx = ax - bx; val aby = ay - by; val abz = az - bz
+        val cbx = cx - bx; val cby = cy - by; val cbz = cz - bz
+        val dot  = abx * cbx + aby * cby + abz * cbz
+        val magA = sqrt(abx * abx + aby * aby + abz * abz)
+        val magC = sqrt(cbx * cbx + cby * cby + cbz * cbz)
         if (magA == 0f || magC == 0f) return 180f
         return Math.toDegrees(
             acos((dot / (magA * magC)).toDouble().coerceIn(-1.0, 1.0))
-        ).toFloat() / 2f
+        ).toFloat()
     }
 
     private fun captureRepAngle(exercise: String, p: List<*>): Float? {
@@ -372,8 +367,8 @@ class QuickPoseActivity : ComponentActivity() {
                 val rHip   = lm(p, LM_RIGHT_HIP)   ?: return null
                 val rKnee  = lm(p, LM_RIGHT_KNEE)  ?: return null
                 val rAnkle = lm(p, LM_RIGHT_ANKLE) ?: return null
-                val left  = angleDeg(lHip.x, lHip.y, lKnee.x, lKnee.y, lAnkle.x, lAnkle.y)
-                val right = angleDeg(rHip.x, rHip.y, rKnee.x, rKnee.y, rAnkle.x, rAnkle.y)
+                val left  = angleDeg(lHip.x, lHip.y, lHip.z, lKnee.x, lKnee.y, lKnee.z, lAnkle.x, lAnkle.y, lAnkle.z)
+                val right = angleDeg(rHip.x, rHip.y, rHip.z, rKnee.x, rKnee.y, rKnee.z, rAnkle.x, rAnkle.y, rAnkle.z)
                 (left + right) / 2f
             }
             "pushup" -> {
@@ -383,21 +378,21 @@ class QuickPoseActivity : ComponentActivity() {
                 val rShoulder = lm(p, LM_RIGHT_SHOULDER) ?: return null
                 val rElbow    = lm(p, LM_RIGHT_ELBOW)    ?: return null
                 val rWrist    = lm(p, LM_RIGHT_WRIST)    ?: return null
-                val left  = angleDeg(lShoulder.x, lShoulder.y, lElbow.x, lElbow.y, lWrist.x, lWrist.y)
-                val right = angleDeg(rShoulder.x, rShoulder.y, rElbow.x, rElbow.y, rWrist.x, rWrist.y)
+                val left  = angleDeg(lShoulder.x, lShoulder.y, lShoulder.z, lElbow.x, lElbow.y, lElbow.z, lWrist.x, lWrist.y, lWrist.z)
+                val right = angleDeg(rShoulder.x, rShoulder.y, rShoulder.z, rElbow.x, rElbow.y, rElbow.z, rWrist.x, rWrist.y, rWrist.z)
                 (left + right) / 2f
             }
             "lunge_left" -> {
                 val hip   = lm(p, LM_LEFT_HIP)   ?: return null
                 val knee  = lm(p, LM_LEFT_KNEE)  ?: return null
                 val ankle = lm(p, LM_LEFT_ANKLE) ?: return null
-                angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
+                angleDeg(hip.x, hip.y, hip.z, knee.x, knee.y, knee.z, ankle.x, ankle.y, ankle.z)
             }
             "lunge_right" -> {
                 val hip   = lm(p, LM_RIGHT_HIP)   ?: return null
                 val knee  = lm(p, LM_RIGHT_KNEE)  ?: return null
                 val ankle = lm(p, LM_RIGHT_ANKLE) ?: return null
-                angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
+                angleDeg(hip.x, hip.y, hip.z, knee.x, knee.y, knee.z, ankle.x, ankle.y, ankle.z)
             }
             else -> null
         }
@@ -421,8 +416,8 @@ class QuickPoseActivity : ComponentActivity() {
         val rKnee  = lm(p, LM_RIGHT_KNEE)  ?: return null
         val rAnkle = lm(p, LM_RIGHT_ANKLE) ?: return null
 
-        val leftAngle  = angleDeg(lHip.x, lHip.y, lKnee.x, lKnee.y, lAnkle.x, lAnkle.y)
-        val rightAngle = angleDeg(rHip.x, rHip.y, rKnee.x, rKnee.y, rAnkle.x, rAnkle.y)
+        val leftAngle  = angleDeg(lHip.x, lHip.y, lHip.z, lKnee.x, lKnee.y, lKnee.z, lAnkle.x, lAnkle.y, lAnkle.z)
+        val rightAngle = angleDeg(rHip.x, rHip.y, rHip.z, rKnee.x, rKnee.y, rKnee.z, rAnkle.x, rAnkle.y, rAnkle.z)
         val avgAngle   = (leftAngle + rightAngle) / 2f
         println("=== SQUAT DEPTH: kneeAngle=$avgAngle ===")
         return if (avgAngle > 110f) "Go deeper — hips below knees" else null
@@ -435,7 +430,7 @@ class QuickPoseActivity : ComponentActivity() {
         val ankle   = lm(p, if (isLeft) LM_LEFT_ANKLE else LM_RIGHT_ANKLE) ?: return null
         val toe     = lm(p, if (isLeft) LM_LEFT_TOE   else LM_RIGHT_TOE)   ?: return null
 
-        val kneeAngle = angleDeg(hip.x, hip.y, knee.x, knee.y, ankle.x, ankle.y)
+        val kneeAngle = angleDeg(hip.x, hip.y, hip.z, knee.x, knee.y, knee.z, ankle.x, ankle.y, ankle.z)
         if (kneeAngle > 120f) return "Lunge deeper — front knee to 90 degrees"
         if (abs(knee.x - toe.x) > 0.08f) return "Keep your front knee behind your toes"
         return null
@@ -449,8 +444,8 @@ class QuickPoseActivity : ComponentActivity() {
         val rElbow    = lm(p, LM_RIGHT_ELBOW)    ?: return null
         val rWrist    = lm(p, LM_RIGHT_WRIST)    ?: return null
 
-        val leftAngle  = angleDeg(lShoulder.x, lShoulder.y, lElbow.x, lElbow.y, lWrist.x, lWrist.y)
-        val rightAngle = angleDeg(rShoulder.x, rShoulder.y, rElbow.x, rElbow.y, rWrist.x, rWrist.y)
+        val leftAngle  = angleDeg(lShoulder.x, lShoulder.y, lShoulder.z, lElbow.x, lElbow.y, lElbow.z, lWrist.x, lWrist.y, lWrist.z)
+        val rightAngle = angleDeg(rShoulder.x, rShoulder.y, rShoulder.z, rElbow.x, rElbow.y, rElbow.z, rWrist.x, rWrist.y, rWrist.z)
         val avgAngle   = (leftAngle + rightAngle) / 2f
         println("=== PUSHUP DEPTH: elbowAngle=$avgAngle ===")
         return if (avgAngle > 120f) "Go lower — chest closer to the ground" else null
