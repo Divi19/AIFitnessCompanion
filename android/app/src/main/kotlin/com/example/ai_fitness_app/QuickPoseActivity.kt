@@ -335,13 +335,24 @@ class QuickPoseActivity : ComponentActivity() {
         }
     }
 
+    // ── Aspect-ratio-corrected angle ──────────────────────────────────────
+    // MediaPipe landmarks are normalised to [0,1] in both axes, but the camera
+    // frame is portrait (9:16), so a unit step in x covers ~1.78x more real-world
+    // distance than a unit step in y. Without correction every angle is skewed
+    // because the x vectors are artificially compressed relative to y.
+    // We scale x by the aspect ratio (height/width = 16/9 ≈ 1.778) so both axes
+    // represent equal real-world distances before computing the dot product.
+    private val ASPECT_RATIO = 16f / 9f  // portrait phone, front camera
+
     private fun angleDeg(
         ax: Float, ay: Float,
         bx: Float, by: Float,
         cx: Float, cy: Float
     ): Float {
-        val abx = ax - bx; val aby = ay - by
-        val cbx = cx - bx; val cby = cy - by
+        // Scale x coordinates to correct for non-square normalised space
+        val axS = ax * ASPECT_RATIO; val bxS = bx * ASPECT_RATIO; val cxS = cx * ASPECT_RATIO
+        val abx = axS - bxS; val aby = ay - by
+        val cbx = cxS - bxS; val cby = cy - by
         val dot  = abx * cbx + aby * cby
         val magA = sqrt(abx * abx + aby * aby)
         val magC = sqrt(cbx * cbx + cby * cby)
