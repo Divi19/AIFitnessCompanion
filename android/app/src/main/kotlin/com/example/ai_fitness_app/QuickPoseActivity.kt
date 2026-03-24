@@ -147,7 +147,9 @@ class QuickPoseActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.setDecorFitsSystemWindows(false)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
 
         currentExercise = intent.getStringExtra(EXTRA_EXERCISE) ?: "squat"
