@@ -81,7 +81,7 @@ class QuickPoseActivity : ComponentActivity() {
     private val timerExercises = setOf("plank")
 
     private var isAtProperDepth = false
-    private val DEPTH_THRESHOLD = 0.3f
+    private val DEPTH_THRESHOLD = 0.15f
 
     private var sessionStartMs       = 0L
     private var latestRepCount       = 0
