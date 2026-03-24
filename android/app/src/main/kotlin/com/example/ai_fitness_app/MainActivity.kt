@@ -15,7 +15,6 @@ class MainActivity : FlutterActivity() {
 
     private val METHOD_CHANNEL   = "com.example.ai_fitness_app/quickpose"
     private val EVENT_CHANNEL    = "com.example.ai_fitness_app/quickpose_events"
-    // Separate channel for session summaries so Flutter can handle them differently
     private val SESSION_CHANNEL  = "com.example.ai_fitness_app/quickpose_session"
     private val SDK_KEY          = "01KKNZJ3ZF08HF5HXP2Z1WEFNP"
 
@@ -29,11 +28,13 @@ class MainActivity : FlutterActivity() {
             val repCount = intent.getIntExtra(QuickPoseActivity.EXTRA_REP_COUNT, 0)
             val feedback = intent.getStringExtra(QuickPoseActivity.EXTRA_FEEDBACK) ?: ""
             val status   = intent.getStringExtra(QuickPoseActivity.EXTRA_STATUS)   ?: "loading"
+            val isTimer  = intent.getBooleanExtra("isTimer", false)
             runOnUiThread {
                 eventSink?.success(mapOf(
                     "repCount"      to repCount,
                     "feedback"      to feedback,
                     "status"        to status,
+                    "isTimer"       to isTimer,
                     "exerciseState" to "",
                     "fps"           to 0
                 ))
@@ -42,7 +43,6 @@ class MainActivity : FlutterActivity() {
     }
 
     // ── Session summary receiver ──────────────────────────────────────────
-    // Fires when a session ends and passes the quality threshold check
     private val sessionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val exercise     = intent.getStringExtra(QuickPoseActivity.EXTRA_SESSION_EXERCISE) ?: return
@@ -51,18 +51,26 @@ class MainActivity : FlutterActivity() {
             val feedbackKeys = intent.getStringArrayExtra(QuickPoseActivity.EXTRA_SESSION_FEEDBACK_KEYS) ?: emptyArray()
             val feedbackVals = intent.getIntArrayExtra(QuickPoseActivity.EXTRA_SESSION_FEEDBACK_VALUES) ?: intArrayOf()
 
-            // Rebuild the feedback map from parallel arrays
-            val feedbackMap = feedbackKeys.zip(feedbackVals.toList()).toMap()
+            // ── FIX: read avgJointAngle from the broadcast ────────────────
+            // -1f is the sentinel meaning "no landmarks captured this session"
+            // We pass it through as-is; QuickPoseService.dart normalises it to null
+            val rawAngle     = intent.getFloatExtra(QuickPoseActivity.EXTRA_SESSION_AVG_ANGLE, -1f)
+            val avgAngle: Double? = if (rawAngle >= 0f) rawAngle.toDouble() else null
+
+            val feedbackMap  = feedbackKeys.zip(feedbackVals.toList()).toMap()
 
             println("=== MAIN: Session received — $exercise, $reps reps, ${durationMs}ms ===")
             println("=== MAIN: Feedback — $feedbackMap ===")
+            println("=== MAIN: avgJointAngle — raw=$rawAngle stored=$avgAngle ===")
 
             runOnUiThread {
                 sessionSink?.success(mapOf(
-                    "exercise"    to exercise,
-                    "reps"        to reps,
-                    "durationMs"  to durationMs,
-                    "feedbackMap" to feedbackMap   // Map<String, Int> — Flutter receives this as a Map
+                    "exercise"       to exercise,
+                    "reps"           to reps,
+                    "durationMs"     to durationMs,
+                    "feedbackMap"    to feedbackMap,
+                    // ── FIX: was missing entirely — this is why the widget never appeared
+                    "avgJointAngle"  to avgAngle
                 ))
             }
         }
@@ -89,8 +97,6 @@ class MainActivity : FlutterActivity() {
             })
 
         // ── Session summary EventChannel ──────────────────────────────────
-        // Flutter listens to this stream to know when a valid session ends
-        // and triggers the Firestore save + debrief generation
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, SESSION_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
