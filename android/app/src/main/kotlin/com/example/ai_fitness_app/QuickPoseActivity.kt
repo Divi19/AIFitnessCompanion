@@ -33,7 +33,6 @@ class QuickPoseActivity : ComponentActivity() {
         const val EXTRA_SESSION_DURATION_MS = "session_duration_ms"
         const val EXTRA_SESSION_FEEDBACK_KEYS   = "session_feedback_keys"
         const val EXTRA_SESSION_FEEDBACK_VALUES = "session_feedback_values"
-        // New: average joint angle at the bottom of each rep
         const val EXTRA_SESSION_AVG_ANGLE   = "session_avg_joint_angle"
 
         const val MIN_REPS        = 3
@@ -47,7 +46,6 @@ class QuickPoseActivity : ComponentActivity() {
 
         const val FORM_FEEDBACK_WINDOW = 25
 
-        // MediaPipe 33-point pose landmark indices
         const val LM_LEFT_SHOULDER  = 11
         const val LM_RIGHT_SHOULDER = 12
         const val LM_LEFT_ELBOW     = 13
@@ -92,16 +90,7 @@ class QuickPoseActivity : ComponentActivity() {
     private var formFeedbackCooldown = 0
     private var prevCounterValue     = 0f
 
-    // ── Joint angle accumulator ───────────────────────────────────────────
-    // Collects the angle measured at the bottom of each rep.
-    // For squats/lunges: hip-knee-ankle angle.
-    // For push-ups: shoulder-elbow-wrist angle.
-    // Only populated when landmarks are visible and confidence is high.
-    // Averaged at session end and broadcast alongside the session summary.
     private val jointAngles = mutableListOf<Float>()
-
-    // Tracks whether we have already captured the angle for the current rep.
-    // Resets when the counter value rises back above DEPTH_THRESHOLD.
     private var repAngleCaptured = false
 
     private lateinit var repCountText:  TextView
@@ -248,6 +237,8 @@ class QuickPoseActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // ── FIX: broadcast BEFORE stopping so latestRepCount is still valid ──
+        broadcastSessionIfValid()
         stopTimer()
         quickPose.stop()
         try { cameraView.stop() } catch (e: Exception) {}
@@ -257,9 +248,10 @@ class QuickPoseActivity : ComponentActivity() {
     override fun onBackPressed() { finishCleanly() }
 
     private fun finishCleanly() {
+        // ── FIX: broadcast first, then tear down camera/pose ──────────────
+        broadcastSessionIfValid()
         quickPose.stop()
         try { cameraView.stop() } catch (e: Exception) {}
-        broadcastSessionIfValid()
         finish()
     }
 
@@ -270,8 +262,8 @@ class QuickPoseActivity : ComponentActivity() {
         lastRepTime          = 0L
         formFeedbackCooldown = 0
         prevCounterValue     = 0f
+        lastBroadcastedRepCount = 0
         counter.reset()
-        // Reset angle accumulator for new session
         jointAngles.clear()
         repAngleCaptured = false
     }
@@ -289,7 +281,6 @@ class QuickPoseActivity : ComponentActivity() {
             return
         }
 
-        // Compute average joint angle — -1f signals no data was captured
         val avgAngle = if (jointAngles.isNotEmpty())
             jointAngles.sum() / jointAngles.size
         else -1f
@@ -353,10 +344,6 @@ class QuickPoseActivity : ComponentActivity() {
         ).toFloat()
     }
 
-    // ── Capture angle at the deepest point of a rep ───────────────────────
-    // Called every frame when counterValue <= DEPTH_THRESHOLD (bottom of rep).
-    // We capture once per rep (repAngleCaptured flag) to avoid duplicates.
-    // Returns the angle if landmarks were available, null otherwise.
     private fun captureRepAngle(exercise: String, p: List<*>): Float? {
         if (p.isEmpty()) return null
         return when (exercise) {
@@ -540,7 +527,6 @@ class QuickPoseActivity : ComponentActivity() {
                             it.isRequired == true
                         } ?: false
 
-                        // ── Get pose landmarks for angle capture ──────────
                         val poseList = getPoseLandmarks(landmarks)
 
                         if (features != null && features.isNotEmpty()) {
@@ -549,10 +535,6 @@ class QuickPoseActivity : ComponentActivity() {
                                     val counterValue = result.value
                                     isAtProperDepth  = counterValue <= DEPTH_THRESHOLD
 
-                                    // ── Angle capture at rep bottom ───────
-                                    // When the counter value drops to/below DEPTH_THRESHOLD
-                                    // the user is at the deepest point of the rep.
-                                    // We capture once per rep using repAngleCaptured flag.
                                     if (counterValue <= DEPTH_THRESHOLD && !repAngleCaptured) {
                                         val angle = captureRepAngle(exerciseName, poseList)
                                         if (angle != null) {
@@ -561,7 +543,6 @@ class QuickPoseActivity : ComponentActivity() {
                                         }
                                         repAngleCaptured = true
                                     }
-                                    // Reset capture flag when user rises back up
                                     if (counterValue > DEPTH_THRESHOLD) {
                                         repAngleCaptured = false
                                     }
@@ -569,6 +550,9 @@ class QuickPoseActivity : ComponentActivity() {
                                     if (!hasRequiredFormIssue) {
                                         val newCount = counter.count(counterValue).count
                                         if (newCount != lastBroadcastedRepCount) {
+                                            // ── FIX: keep latestRepCount in sync so
+                                            //    broadcastSessionIfValid() has the real count ──
+                                            latestRepCount          = newCount
                                             lastBroadcastedRepCount = newCount
                                             runOnUiThread {
                                                 repCountText.text = newCount.toString()
@@ -600,6 +584,16 @@ class QuickPoseActivity : ComponentActivity() {
                         val feedbackMsg = feedback?.values?.firstOrNull()?.displayString ?: ""
                         if (feedbackMsg != lastBroadcastedFeedback) {
                             lastBroadcastedFeedback = feedbackMsg
+
+                            // ── Track feedback frequency for form score ──
+                            val isSetupMsg = SETUP_KEYWORDS.any { kw ->
+                                feedbackMsg.lowercase().contains(kw)
+                            }
+                            if (feedbackMsg.isNotEmpty() && !isSetupMsg) {
+                                feedbackFrequency[feedbackMsg] =
+                                    (feedbackFrequency[feedbackMsg] ?: 0) + 1
+                            }
+
                             runOnUiThread {
                                 if (feedbackMsg.isNotEmpty()) {
                                     feedbackText.setBackgroundColor(
