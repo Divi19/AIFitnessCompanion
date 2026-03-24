@@ -89,6 +89,8 @@ class QuickPoseActivity : ComponentActivity() {
     private var lastRepTime          = 0L
     private var formFeedbackCooldown = 0
     private var prevCounterValue     = 0f
+    // Guard flag — ensures the session broadcast fires at most once per session
+    private var sessionBroadcasted   = false
 
     private val jointAngles = mutableListOf<Float>()
     private var repAngleCaptured = false
@@ -263,12 +265,16 @@ class QuickPoseActivity : ComponentActivity() {
         formFeedbackCooldown = 0
         prevCounterValue     = 0f
         lastBroadcastedRepCount = 0
+        sessionBroadcasted   = false
         counter.reset()
         jointAngles.clear()
         repAngleCaptured = false
     }
 
     private fun broadcastSessionIfValid() {
+        // Guard: only ever broadcast once per session
+        if (sessionBroadcasted) return
+        
         val durationMs    = System.currentTimeMillis() - sessionStartMs
         val meetsReps     = latestRepCount >= MIN_REPS
         val meetsDuration = durationMs     >= MIN_DURATION_MS
@@ -290,6 +296,7 @@ class QuickPoseActivity : ComponentActivity() {
         val feedbackKeys   = feedbackFrequency.keys.toTypedArray()
         val feedbackValues = feedbackFrequency.values.map { it }.toIntArray()
         println("=== SESSION SAVED: broadcasting to Flutter ===")
+        sessionBroadcasted = true
 
         sendBroadcast(Intent(ACTION_SESSION).apply {
             putExtra(EXTRA_SESSION_EXERCISE,        currentExercise)
