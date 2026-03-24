@@ -1,5 +1,8 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui; // Added for RepaintBoundary image extraction
+import 'package:flutter/rendering.dart'; // Added for RepaintBoundary
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/gemini_service.dart';
@@ -9,41 +12,22 @@ import '../models/meal_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MEAL TRACKER — REFACTORED FLOW
+// MEAL TRACKER — UNIFIED IPHONE-STYLE SCANNER
 //
-//  PHOTO MEAL (3 steps, clearly separated):
-//
-//  Step 1 — VALIDATE (Gemini)
-//    Is this a food image? If NO → show _InvalidFoodState widget, stop.
-//    If YES → continue to step 2.
-//
-//  Step 2 — IDENTIFY (Gemini)
-//    Gemini analyses the food image:
-//      - names the dish (up to 3 candidates)
-//      - estimates portion weight in grams from visual cues
-//      - flags regional dishes (USDA won't have them)
-//      - provides fallback macros for that gram weight
-//
-//  Step 3 — LOOKUP (USDA → Gemini fallback)
-//    For each candidate, MealService.enrichCandidate():
-//      a. Searches USDA FoodData Central by dish name
-//      b. Found → USDA per-100g macros × (grams/100) ← real database, accurate
-//      c. Not found → Gemini's own fallback macros (regional foods like nasi lemak)
-//    User sees gram field pre-filled with Gemini's estimate.
-//    Macros recalculate live as user adjusts grams.
-//
-//  BARCODE SNACK (unchanged):
-//    Scan → Open Food Facts → show nutrition + portion selector → log
+// One screen. Live camera always running.
+// • Barcode drifts into frame → banner slides up → tap "Look up"
+// • No barcode → big shutter button → Gemini meal flow
+// • Gallery icon for picking from photos
+// • ⓘ button → fun explainer bottom sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Represents which phase of analysis we are in
 enum _AnalysisState {
-  idle,          // Nothing happening — show camera/gallery buttons
-  validating,    // Step 1: Checking if image is food
-  notFood,       // Step 1 failed: image is not food
-  identifying,   // Step 2: Gemini identifying the dish
-  lookingUp,     // Step 3: USDA lookup in progress
-  done,          // Results ready — show suggestion cards
+  idle,
+  validating,
+  notFood,
+  identifying,
+  lookingUp,
+  done,
 }
 
 class MealTrackerScreen extends StatefulWidget {
@@ -54,91 +38,213 @@ class MealTrackerScreen extends StatefulWidget {
 }
 
 class _MealTrackerScreenState extends State<MealTrackerScreen>
-    with SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  
+  final GlobalKey _cameraKey = GlobalKey(); // Added to capture the live feed
+
   final MealGeminiService _geminiService = MealGeminiService();
   final MealService       _mealService   = MealService();
   final ImagePicker       _imagePicker   = ImagePicker();
 
-  late final TabController _tabController = TabController(length: 2, vsync: this);
+  final MobileScannerController _scannerController = MobileScannerController(
+    formats: [
+      BarcodeFormat.ean13, BarcodeFormat.ean8,
+      BarcodeFormat.upcA,  BarcodeFormat.upcE,
+      BarcodeFormat.code128, BarcodeFormat.qrCode,
+    ],
+    // returnImage: true lets us grab the camera frame on capture
+    returnImage: true,
+  );
 
-  // ── Photo tab state ───────────────────────────────────────────────────────
+  // ── Photo / Gemini state ──────────────────────────────────────────────────
   _AnalysisState _analysisState = _AnalysisState.idle;
   List<Map<String, dynamic>> _mealSuggestions = [];
   Uint8List? _capturedImageBytes;
 
-  // ── Snack scan tab state ──────────────────────────────────────────────────
-  bool _isScanning       = true;
-  bool _isFetchingProduct = false;
+  // ── Barcode state ─────────────────────────────────────────────────────────
+  String?  _detectedBarcode;
+  bool     _showBarcodeBanner  = false;
+  bool     _isFetchingProduct  = false;
+  bool     _scanLock           = false;
   Map<String, dynamic>? _scannedProduct;
-  double _portionFactor  = 1.0;
-  bool _scanLock         = false;
-  final MobileScannerController _scannerController = MobileScannerController();
+  double   _portionFactor      = 1.0;
 
-  // ── Daily log state ───────────────────────────────────────────────────────
+  // ── Daily log ─────────────────────────────────────────────────────────────
   List<MealModel> _todaysLogs = [];
   final String _userId = FirebaseAuth.instance.currentUser?.uid ?? 'demo_user';
+
+  // ── Torch ─────────────────────────────────────────────────────────────────
+  bool _torchOn = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadTodaysLogs();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_analysisState != _AnalysisState.idle) return;
+    if (state == AppLifecycleState.resumed) {
+      _scannerController.start();
+    } else if (state == AppLifecycleState.paused ||
+               state == AppLifecycleState.inactive) {
+      _scannerController.stop();
+    }
+  }
+
+  @override
   void dispose() {
-    _tabController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     _scannerController.dispose();
     super.dispose();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PHOTO MEAL FLOW
+  // BARCODE FLOW
   // ─────────────────────────────────────────────────────────────────────────
 
-  Future<void> _takeMealPhoto(ImageSource source) async {
-    final picked = await _imagePicker.pickImage(source: source, imageQuality: 85);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
+  void _onBarcodeDetected(BarcodeCapture capture) {
+    // Don't interrupt an active Gemini analysis or product lookup
+    if (_analysisState != _AnalysisState.idle) return;
+    if (_scanLock || _isFetchingProduct || _scannedProduct != null) return;
 
-    // Reset to clean state before starting
+    final raw = capture.barcodes.firstOrNull?.rawValue;
+    if (raw == null || raw.isEmpty || raw == _detectedBarcode) return;
+
+    HapticFeedback.lightImpact();
+    setState(() {
+      _detectedBarcode  = raw;
+      _showBarcodeBanner = true;
+    });
+  }
+
+  Future<void> _confirmBarcode() async {
+    if (_detectedBarcode == null) return;
+    _scanLock = true;
+    _scannerController.stop();
+
+    setState(() {
+      _showBarcodeBanner = false;
+      _isFetchingProduct = true;
+    });
+
+    final product = await _mealService.fetchProductByBarcode(_detectedBarcode!);
+
+    setState(() {
+      _isFetchingProduct = false;
+      _scannedProduct    = product;
+      _portionFactor     = 1.0;
+      _detectedBarcode   = null;
+    });
+
+    if (product == null) {
+      _scanLock = false;
+      _scannerController.start();
+      _showSnack('Product not found. Try another barcode.', isError: true);
+    }
+  }
+
+  void _dismissBarcodeBanner() {
+    setState(() { _showBarcodeBanner = false; _detectedBarcode = null; });
+  }
+
+  Future<void> _confirmSnack() async {
+    if (_scannedProduct == null) return;
+    final nutrition = _mealService.calculateNutrition(
+        productData: _scannedProduct!, portionFactor: _portionFactor);
+    await _mealService.logMeal(
+      userId: _userId, name: _scannedProduct!['name'], type: 'snack',
+      calories: nutrition['calories']!, protein: nutrition['protein']!,
+      carbs: nutrition['carbs']!, fat: nutrition['fat']!, portion: _portionFactor,
+    );
+    setState(() { _scannedProduct = null; _portionFactor = 1.0; _scanLock = false; });
+    await _loadTodaysLogs();
+    _scannerController.start();
+    _showSnack('${_scannedProduct?['name'] ?? 'Snack'} logged! 🎉');
+  }
+
+  void _resetToCamera() {
+    _scannerController.start();
+    setState(() {
+      _scannedProduct    = null;
+      _portionFactor     = 1.0;
+      _scanLock          = false;
+      _detectedBarcode   = null;
+      _showBarcodeBanner = false;
+      _analysisState     = _AnalysisState.idle;
+      _mealSuggestions   = [];
+      _capturedImageBytes = null;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHOTO / GEMINI FLOW
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Called by shutter button — captures a frame from the live MobileScanner feed.
+  // No second camera opened; the live feed IS the camera.
+  Future<void> _captureFromScanner() async {
+    if (_analysisState != _AnalysisState.idle) return;
+
+    try {
+      // Find the visual boundary of the camera and convert it to an image
+      RenderRepaintBoundary boundary = _cameraKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+      if (byteData != null) {
+        final Uint8List bytes = byteData.buffer.asUint8List();
+        await _scannerController.stop();
+        await _runGeminiFlow(bytes);
+      } else {
+        _showSnack('Could not capture frame — try again.', isError: true);
+      }
+    } catch (e) {
+      _showSnack('Could not capture frame — try again.', isError: true);
+    }
+  }
+
+  // Called by gallery button — only image_picker gallery, never camera
+  Future<void> _pickFromGallery() async {
+    await _scannerController.stop();
+    final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery, imageQuality: 85, maxWidth: 1200);
+    if (picked == null) { _scannerController.start(); return; }
+    final bytes = await picked.readAsBytes();
+    await _runGeminiFlow(bytes);
+  }
+
+  Future<void> _takeMealPhoto(ImageSource source) async {
+    if (source == ImageSource.gallery) { await _pickFromGallery(); return; }
+    await _captureFromScanner();
+  }
+
+  Future<void> _runGeminiFlow(Uint8List bytes) async {
+
     setState(() {
       _analysisState      = _AnalysisState.validating;
       _mealSuggestions    = [];
       _capturedImageBytes = bytes;
+      _showBarcodeBanner  = false;
+      _detectedBarcode    = null;
     });
 
-    // ── STEP 1: Is this a food image? ──────────────────────────────────────
+    // Step 1 — validate
     final isFood = await _geminiService.validateFoodImage(bytes);
+    if (!isFood) { setState(() => _analysisState = _AnalysisState.notFood); return; }
 
-    if (!isFood) {
-      // Not food — show the invalid state and stop
-      setState(() => _analysisState = _AnalysisState.notFood);
-      return;
-    }
-
-    // ── STEP 2: Identify the dish + estimate grams ─────────────────────────
+    // Step 2 — identify
     setState(() => _analysisState = _AnalysisState.identifying);
     final geminiResults = await _geminiService.classifyMealWithGrams(bytes);
 
-    // ── STEP 3: USDA lookup or Gemini fallback for each candidate ───────────
+    // Step 3 — USDA enrich
     setState(() => _analysisState = _AnalysisState.lookingUp);
     final enriched = <Map<String, dynamic>>[];
-    for (final candidate in geminiResults) {
-      enriched.add(await _mealService.enrichCandidate(candidate));
-    }
+    for (final c in geminiResults) enriched.add(await _mealService.enrichCandidate(c));
 
-    setState(() {
-      _analysisState   = _AnalysisState.done;
-      _mealSuggestions = enriched;
-    });
-  }
-
-  void _resetPhotoState() {
-    setState(() {
-      _analysisState      = _AnalysisState.idle;
-      _mealSuggestions    = [];
-      _capturedImageBytes = null;
-    });
+    setState(() { _analysisState = _AnalysisState.done; _mealSuggestions = enriched; });
   }
 
   static double _toDouble(dynamic v) =>
@@ -147,86 +253,100 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   Future<void> _confirmMeal(Map<String, dynamic> suggestion, double grams) async {
     final factor = grams / 100.0;
     await _mealService.logMeal(
-      userId:   _userId,
-      name:     suggestion['name'],
-      type:     'meal',
-      calories: _toDouble(suggestion['cal_per_100g']) * factor,
+      userId: _userId, name: suggestion['name'], type: 'meal',
+      calories: _toDouble(suggestion['cal_per_100g'])  * factor,
       protein:  _toDouble(suggestion['prot_per_100g']) * factor,
       carbs:    _toDouble(suggestion['carb_per_100g']) * factor,
       fat:      _toDouble(suggestion['fat_per_100g'])  * factor,
       portion:  grams,
     );
-    _resetPhotoState();
+    _resetToCamera();
     await _loadTodaysLogs();
-    _showSuccessSnackbar('${suggestion['name']} logged!');
+    _showSnack('${suggestion['name']} logged! 🔥');
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SNACK SCAN FLOW (unchanged)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Future<void> _onBarcodeDetected(BarcodeCapture capture) async {
-    if (_scanLock) return;
-    if (capture.barcodes.isEmpty) return;
-    final barcode = capture.barcodes.first.rawValue;
-    if (barcode == null) return;
-
-    _scanLock = true;
-    _scannerController.stop();
-
-    setState(() {
-      _isScanning       = false;
-      _isFetchingProduct = true;
-      _scannedProduct   = null;
-      _portionFactor    = 1.0;
-    });
-
-    final product = await _mealService.fetchProductByBarcode(barcode);
-
-    setState(() {
-      _isFetchingProduct = false;
-      _scannedProduct    = product;
-    });
-
-    if (product == null) {
-      _showErrorSnackbar('Product not found or incomplete data. Try another product.');
-      _resetScanner();
-    }
-  }
-
-  Future<void> _confirmSnack() async {
-    if (_scannedProduct == null) return;
-    final productName = _scannedProduct!['name'] as String;
-    final nutrition   = _mealService.calculateNutrition(
-      productData: _scannedProduct!, portionFactor: _portionFactor);
-    await _mealService.logMeal(
-      userId: _userId, name: productName, type: 'snack',
-      calories: nutrition['calories']!, protein: nutrition['protein']!,
-      carbs: nutrition['carbs']!, fat: nutrition['fat']!, portion: _portionFactor,
-    );
-    _resetScanner();
-    await _loadTodaysLogs();
-    _showSuccessSnackbar('$productName logged!');
-  }
-
-  void _resetScanner() {
-    _scannerController.stop();
-    setState(() { _isScanning = true; _scannedProduct = null; _portionFactor = 1.0; _scanLock = false; });
-    Future.delayed(const Duration(milliseconds: 500), () { if (mounted) _scannerController.start(); });
-  }
-
-  // ── SHARED ────────────────────────────────────────────────────────────────
+  // ── Shared helpers ────────────────────────────────────────────────────────
 
   Future<void> _loadTodaysLogs() async {
     final logs = await _mealService.getTodaysLogs(_userId);
-    setState(() => _todaysLogs = logs);
+    if (mounted) setState(() => _todaysLogs = logs);
   }
 
-  void _showSuccessSnackbar(String msg) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(msg), backgroundColor: Colors.green, duration: const Duration(seconds: 2)));
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 2),
+    ));
+  }
 
-  void _showErrorSnackbar(String msg) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(msg), backgroundColor: Colors.red, duration: const Duration(seconds: 3)));
+  // ─────────────────────────────────────────────────────────────────────────
+  // INFO BOTTOM SHEET
+  // ─────────────────────────────────────────────────────────────────────────
+
+  void _showInfoSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        decoration: const BoxDecoration(
+          color: Color(0xFF111111),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const Text('How to use the scanner 📱',
+              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 24),
+            _infoTile('🍔', 'Snap your meal',
+              'Point at any food and hit the big button. AI will name it, guess the portion, and crunch the macros. No menu needed!'),
+            _infoTile('📦', 'Scan a barcode',
+              'Drifting a snack packet into frame? The camera auto-spots the barcode and pops up a banner. Tap "Look up" — done.'),
+            _infoTile('📸', 'Use your gallery',
+              'Already ate? Tap the gallery icon, pick a photo of your plate, and let AI do the detective work.'),
+            _infoTile('⚖️', 'Adjust the grams',
+              'AI guesses the portion size visually. If your plate was more of a mountain than a hill, just slide or type the real amount.'),
+            _infoTile('💡', 'Pro tip',
+              'Natural lighting = better AI results. Step away from dramatic shadows for a sec before snapping!'),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoTile(String emoji, String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 14),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(
+                  color: Color(0xFFB9FF2B), fontSize: 14, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(body, style: const TextStyle(
+                  color: Colors.white60, fontSize: 13, height: 1.5)),
+            ],
+          )),
+        ],
+      ),
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // BUILD
@@ -234,354 +354,705 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
   @override
   Widget build(BuildContext context) {
+    final showCamera = _analysisState == _AnalysisState.idle &&
+                       _scannedProduct == null &&
+                       !_isFetchingProduct;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text('Meal Tracker', style: TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.greenAccent,
-          labelColor: Colors.greenAccent,
-          unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(icon: Icon(Icons.restaurant), text: 'Meal Photo'),
-            Tab(icon: Icon(Icons.qr_code_scanner), text: 'Snack Scan'),
-          ],
-        ),
-      ),
-      body: Column(children: [
-        Expanded(child: TabBarView(
-          controller: _tabController,
-          children: [_buildMealPhotoTab(), _buildSnackScanTab()],
-        )),
-        NutritionSummaryCard(logs: _todaysLogs),
-      ]),
-    );
-  }
+      body: Stack(
+        children: [
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // MEAL PHOTO TAB — driven by _AnalysisState enum
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Widget _buildMealPhotoTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(children: [
-
-        // Camera / Gallery buttons — always visible so user can retake
-        Row(children: [
-          Expanded(child: ElevatedButton.icon(
-            onPressed: _analysisState == _AnalysisState.idle ||
-                       _analysisState == _AnalysisState.notFood ||
-                       _analysisState == _AnalysisState.done
-                ? () => _takeMealPhoto(ImageSource.camera) : null,
-            icon: const Icon(Icons.camera_alt),
-            label: const Text('Take Photo'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.greenAccent, foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(vertical: 12)),
-          )),
-          const SizedBox(width: 12),
-          Expanded(child: ElevatedButton.icon(
-            onPressed: _analysisState == _AnalysisState.idle ||
-                       _analysisState == _AnalysisState.notFood ||
-                       _analysisState == _AnalysisState.done
-                ? () => _takeMealPhoto(ImageSource.gallery) : null,
-            icon: const Icon(Icons.photo_library),
-            label: const Text('From Gallery'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey[800], foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12)),
-          )),
-        ]),
-
-        const SizedBox(height: 20),
-
-        // ── State-driven content ──────────────────────────────────────
-        switch (_analysisState) {
-          // Idle — placeholder
-          _AnalysisState.idle => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Column(children: [
-              Icon(Icons.restaurant, color: Colors.grey, size: 60),
-              SizedBox(height: 12),
-              Text('Take a photo of your meal\nto get started',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 14)),
-            ]),
-          ),
-
-          // Validating — step 1 spinner with photo preview
-          _AnalysisState.validating => _buildLoadingState(
-            'Checking if this is food...', showPhoto: true),
-
-          // Not food — invalid state with retry
-          _AnalysisState.notFood => _buildNotFoodState(),
-
-          // Identifying — step 2 spinner
-          _AnalysisState.identifying => _buildLoadingState(
-            'Identifying your meal...', showPhoto: true),
-
-          // Looking up — step 3 spinner
-          _AnalysisState.lookingUp => _buildLoadingState(
-            'Looking up nutrition data...', showPhoto: true),
-
-          // Done — show suggestions
-          _AnalysisState.done => _buildSuggestions(),
-        },
-      ]),
-    );
-  }
-
-  // ── Loading state (steps 1, 2, 3) ────────────────────────────────────────
-  Widget _buildLoadingState(String message, {bool showPhoto = false}) {
-    return Column(children: [
-      if (showPhoto && _capturedImageBytes != null) ...[
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(_capturedImageBytes!,
-              width: double.infinity, height: 200, fit: BoxFit.cover),
-        ),
-        const SizedBox(height: 16),
-      ],
-      const CircularProgressIndicator(color: Colors.greenAccent),
-      const SizedBox(height: 12),
-      Text(message, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-    ]);
-  }
-
-  // ── Not food state ────────────────────────────────────────────────────────
-  // Shown when Gemini determines the image does not contain food.
-  Widget _buildNotFoodState() {
-    return Column(children: [
-      // Show the rejected photo with a red overlay
-      if (_capturedImageBytes != null) ...[
-        Stack(children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.memory(_capturedImageBytes!,
-                width: double.infinity, height: 200, fit: BoxFit.cover),
-          ),
-          // Red tint overlay
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: double.infinity, height: 200,
-              color: Colors.red.withOpacity(0.35)),
-          ),
-          // Error icon centred
-          const Positioned.fill(child: Center(child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.no_food, color: Colors.white, size: 48),
-              SizedBox(height: 8),
-              Text('Not a food image',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ))),
-        ]),
-        const SizedBox(height: 20),
-      ],
-
-      // Description card
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.red.withOpacity(0.35)),
-        ),
-        child: Column(children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 32),
-          const SizedBox(height: 10),
-          const Text('We couldn\'t detect any food in this photo.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          const Text(
-            'Please take a clear photo of a meal or beverage.\n'
-            'Make sure the food is the main subject of the image.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity, height: 46,
-            child: ElevatedButton.icon(
-              onPressed: _resetPhotoState,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent, foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          // ── LAYER 1: live camera (REMOVED 'if (showCamera)' SO IT NEVER CRASHES) ──
+          Positioned.fill(
+            child: RepaintBoundary( 
+              key: _cameraKey,
+              child: MobileScanner(
+                controller: _scannerController,
+                onDetect: _onBarcodeDetected,
               ),
             ),
           ),
-        ]),
-      ),
-    ]);
-  }
 
-  // ── Suggestions (step 3 done) ─────────────────────────────────────────────
-  Widget _buildSuggestions() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Photo at top
-      if (_capturedImageBytes != null) ...[
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(_capturedImageBytes!,
-              width: double.infinity, height: 200, fit: BoxFit.cover),
-        ),
-        const SizedBox(height: 16),
-      ],
-      const Text('What did you eat? Select your meal:',
-          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 12),
-      ..._mealSuggestions.map((s) => _MealSuggestionCard(
-        suggestion: s,
-        onConfirm: (grams) => _confirmMeal(s, grams),
-      )),
-      const SizedBox(height: 8),
-      // Reset button
-      SizedBox(
-        width: double.infinity, height: 44,
-        child: OutlinedButton.icon(
-          onPressed: _resetPhotoState,
-          icon: const Icon(Icons.refresh, size: 18),
-          label: const Text('Take a different photo'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.grey,
-            side: const BorderSide(color: Colors.white12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          // ── LAYER 1.5: Dark background to cover the camera when analysing ──
+          if (!showCamera)
+            Positioned.fill(child: Container(color: const Color(0xFF0D0D0D))),
+
+          // ── LAYER 2: content overlay ───────────────────────────────────
+          Positioned.fill(
+            child: Column(
+              children: [
+                // Safe-area top bar
+                SafeArea(
+                  bottom: false,
+                  child: _buildTopBar(),
+                ),
+
+                // Main content area
+                Expanded(
+                  child: _buildMainContent(),
+                ),
+
+                // Daily nutrition summary at bottom
+                NutritionSummaryCard(logs: _todaysLogs),
+
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
-        ),
-      ),
-    ]);
-  }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SNACK SCAN TAB (unchanged from previous version)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Widget _buildSnackScanTab() {
-    return Column(children: [
-      if (_isScanning) Expanded(child: Stack(children: [
-        MobileScanner(controller: _scannerController, onDetect: _onBarcodeDetected),
-        const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.qr_code_scanner, color: Colors.greenAccent, size: 80),
-          SizedBox(height: 8),
-          Text('Point at the barcode on the package',
-              style: TextStyle(color: Colors.white, backgroundColor: Colors.black54)),
-        ])),
-      ])),
-
-      if (_isFetchingProduct) const Expanded(child: Center(child: Column(
-        mainAxisAlignment: MainAxisAlignment.center, children: [
-          CircularProgressIndicator(color: Colors.greenAccent),
-          SizedBox(height: 12),
-          Text('Looking up product...', style: TextStyle(color: Colors.grey)),
+          // ── LAYER 3: barcode banner (slides up from bottom of camera area)
+          if (showCamera)
+            Positioned(
+              left: 0, right: 0,
+              bottom: _todaysLogs.isEmpty ? 120 : 180,
+              child: AnimatedSlide(
+                offset: _showBarcodeBanner ? Offset.zero : const Offset(0, 1.5),
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                child: AnimatedOpacity(
+                  opacity: _showBarcodeBanner ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: _BarcodeBanner(
+                    barcode: _detectedBarcode ?? '',
+                    onConfirm: _confirmBarcode,
+                    onDismiss: _dismissBarcodeBanner,
+                  ),
+                ),
+              ),
+            ),
         ],
-      ))),
-
-      if (_scannedProduct != null) Expanded(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_scannedProduct!['name'],
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text('Per serving (${_scannedProduct!['serving_size_g'].toStringAsFixed(0)}g)',
-              style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          const SizedBox(height: 16),
-          _nutritionRow('Calories',
-              '${_scannedProduct!['calories_per_100g'] * _scannedProduct!['serving_size_g'] / 100 ~/ 1} kcal',
-              Colors.orangeAccent),
-          _nutritionRow('Protein',
-              '${(_scannedProduct!['protein_per_100g'] * _scannedProduct!['serving_size_g'] / 100).toStringAsFixed(1)}g',
-              Colors.blueAccent),
-          _nutritionRow('Carbs',
-              '${(_scannedProduct!['carbs_per_100g'] * _scannedProduct!['serving_size_g'] / 100).toStringAsFixed(1)}g',
-              Colors.greenAccent),
-          _nutritionRow('Fat',
-              '${(_scannedProduct!['fat_per_100g'] * _scannedProduct!['serving_size_g'] / 100).toStringAsFixed(1)}g',
-              Colors.pinkAccent),
-          const SizedBox(height: 20),
-          const Text('How much did you consume?',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(children: [
-            _portionButton('Full', 1.0), const SizedBox(width: 8),
-            _portionButton('Half', 0.5), const SizedBox(width: 8),
-            _portionButton('¼',   0.25),
-          ]),
-          const SizedBox(height: 12),
-          Text('Custom: ${(_portionFactor * 100).toStringAsFixed(0)}%',
-              style: const TextStyle(color: Colors.grey)),
-          Slider(
-            value: _portionFactor, min: 0.1, max: 1.0, divisions: 9,
-            activeColor: Colors.greenAccent, inactiveColor: Colors.grey[700],
-            onChanged: (v) => setState(() => _portionFactor = v),
-          ),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: ElevatedButton(
-              onPressed: _confirmSnack,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent, foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: const Text('Log Snack', style: TextStyle(fontWeight: FontWeight.bold)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: ElevatedButton(
-              onPressed: _resetScanner,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[800], foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: const Text('Scan Again'),
-            )),
-          ]),
-        ]),
-      )),
-    ]);
+      ),
+    );
   }
 
-  Widget _nutritionRow(String label, String value, Color color) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
-    ]),
-  );
+  // ── Top bar ───────────────────────────────────────────────────────────────
+  Widget _buildTopBar() {
+    final showCamera = _analysisState == _AnalysisState.idle &&
+                       _scannedProduct == null &&
+                       !_isFetchingProduct;
 
-  Widget _portionButton(String label, double value) {
-    final sel = _portionFactor == value;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          // Back / close button when not in camera mode
+          if (!showCamera)
+            GestureDetector(
+              onTap: _resetToCamera,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white, size: 16),
+              ),
+            )
+          else
+            // Torch toggle
+            GestureDetector(
+              onTap: () {
+                _scannerController.toggleTorch();
+                setState(() => _torchOn = !_torchOn);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _torchOn
+                      ? const Color(0xFFB9FF2B).withOpacity(0.15)
+                      : Colors.black45,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _torchOn
+                        ? const Color(0xFFB9FF2B).withOpacity(0.5)
+                        : Colors.white12),
+                ),
+                child: Icon(
+                  _torchOn ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
+                  color: _torchOn ? const Color(0xFFB9FF2B) : Colors.white,
+                  size: 18,
+                ),
+              ),
+            ),
+
+          const Spacer(),
+
+          // Title
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.bolt, color: Color(0xFFB9FF2B), size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  showCamera ? 'Meal Scanner' : _topBarLabel(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          // Info button
+          GestureDetector(
+            onTap: _showInfoSheet,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Icon(Icons.info_outline_rounded,
+                  color: Colors.white70, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _topBarLabel() {
+    if (_isFetchingProduct) return 'Looking up...';
+    if (_scannedProduct != null) return 'Product found';
+    return switch (_analysisState) {
+      _AnalysisState.validating  => 'Checking image...',
+      _AnalysisState.notFood     => 'Not food!',
+      _AnalysisState.identifying => 'Identifying...',
+      _AnalysisState.lookingUp   => 'Fetching nutrition...',
+      _AnalysisState.done        => 'Pick your meal',
+      _AnalysisState.idle        => 'Meal Scanner',
+    };
+  }
+
+  // ── Main content switcher ─────────────────────────────────────────────────
+  Widget _buildMainContent() {
+    // Product card after barcode lookup
+    if (_scannedProduct != null) return _buildProductCard();
+
+    // Fetching product spinner
+    if (_isFetchingProduct) return _buildSpinner('Looking up product...', emoji: '📦');
+
+    return switch (_analysisState) {
+      _AnalysisState.idle        => _buildCameraIdleOverlay(),
+      _AnalysisState.validating  => _buildAnalysisLoading('Checking if this is food...', '🔍', _capturedImageBytes),
+      _AnalysisState.notFood     => _buildNotFoodState(),
+      _AnalysisState.identifying => _buildAnalysisLoading('Identifying your meal...', '🍽️', _capturedImageBytes),
+      _AnalysisState.lookingUp   => _buildAnalysisLoading('Fetching nutrition data...', '📊', _capturedImageBytes),
+      _AnalysisState.done        => _buildSuggestions(),
+    };
+  }
+
+  // ── Camera idle overlay (viewfinder + shutter + gallery) ─────────────────
+  Widget _buildCameraIdleOverlay() {
+    return Stack(
+      children: [
+        // Scan frame hint in centre
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Corner bracket frame
+              SizedBox(
+                width: 220, height: 160,
+                child: CustomPaint(painter: _BracketPainter(
+                    color: _showBarcodeBanner
+                        ? const Color(0xFFB9FF2B)
+                        : Colors.white38)),
+              ),
+              const SizedBox(height: 14),
+              AnimatedOpacity(
+                opacity: _showBarcodeBanner ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  'Point at food or a barcode',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Bottom controls: gallery | shutter | flip
+        Positioned(
+          left: 0, right: 0, bottom: 24,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Gallery
+                _CamButton(
+                  icon: Icons.photo_library_rounded,
+                  onTap: _pickFromGallery,
+                  label: 'Gallery',
+                ),
+
+                // Shutter — captures from the live MobileScanner feed, no second camera
+                GestureDetector(
+                  onTap: _captureFromScanner,
+                  child: Container(
+                    width: 76, height: 76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFB9FF2B),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFB9FF2B).withOpacity(0.4),
+                          blurRadius: 22, spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        color: Colors.black, size: 32),
+                  ),
+                ),
+
+                // Flip
+                _CamButton(
+                  icon: Icons.cameraswitch_rounded,
+                  onTap: _scannerController.switchCamera,
+                  label: 'Flip',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Analysis loading (steps 1-3) ──────────────────────────────────────────
+  Widget _buildAnalysisLoading(String msg, String emoji, Uint8List? photo) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(children: [
+        if (photo != null) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.memory(photo,
+                width: double.infinity, height: 220, fit: BoxFit.cover),
+          ),
+          const SizedBox(height: 20),
+        ],
+        Text(emoji, style: const TextStyle(fontSize: 40)),
+        const SizedBox(height: 14),
+        const CircularProgressIndicator(
+            strokeWidth: 2.5, color: Color(0xFFB9FF2B)),
+        const SizedBox(height: 12),
+        Text(msg, style: const TextStyle(
+            color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
+  Widget _buildSpinner(String msg, {String emoji = '⏳'}) {
+    return Center(child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 44)),
+        const SizedBox(height: 16),
+        const CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFFB9FF2B)),
+        const SizedBox(height: 12),
+        Text(msg, style: const TextStyle(color: Colors.white54, fontSize: 14)),
+      ],
+    ));
+  }
+
+  // ── Not food ──────────────────────────────────────────────────────────────
+  Widget _buildNotFoodState() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(children: [
+        if (_capturedImageBytes != null) ...[
+          Stack(children: [
+            ClipRRect(borderRadius: BorderRadius.circular(16),
+              child: Image.memory(_capturedImageBytes!,
+                  width: double.infinity, height: 220, fit: BoxFit.cover)),
+            ClipRRect(borderRadius: BorderRadius.circular(16),
+              child: Container(width: double.infinity, height: 220,
+                  color: Colors.red.withOpacity(0.35))),
+            const Positioned.fill(child: Center(child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.no_food, color: Colors.white, size: 48),
+                SizedBox(height: 8),
+                Text('Hmm, that doesn\'t look like food',
+                    style: TextStyle(color: Colors.white,
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+              ],
+            ))),
+          ]),
+          const SizedBox(height: 20),
+        ],
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.red.withOpacity(0.35)),
+          ),
+          child: Column(children: [
+            const Text('We couldn\'t spot any food here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white,
+                    fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text(
+              'Try making the food the main subject,\n'
+              'in good lighting, without too much clutter.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, height: 46,
+              child: ElevatedButton.icon(
+                onPressed: _resetToCamera,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFB9FF2B),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  // ── Meal suggestions ──────────────────────────────────────────────────────
+  Widget _buildSuggestions() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (_capturedImageBytes != null) ...[
+          ClipRRect(borderRadius: BorderRadius.circular(14),
+            child: Image.memory(_capturedImageBytes!,
+                width: double.infinity, height: 190, fit: BoxFit.cover)),
+          const SizedBox(height: 16),
+        ],
+        const Text('Which one is your meal?',
+            style: TextStyle(color: Colors.white,
+                fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        ..._mealSuggestions.map((s) => _MealSuggestionCard(
+          suggestion: s,
+          onConfirm: (grams) => _confirmMeal(s, grams),
+        )),
+        const SizedBox(height: 8),
+        SizedBox(width: double.infinity, height: 44,
+          child: OutlinedButton.icon(
+            onPressed: _resetToCamera,
+            icon: const Icon(Icons.camera_alt_rounded, size: 16),
+            label: const Text('Take a different photo'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey,
+              side: const BorderSide(color: Colors.white12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ── Product card (barcode flow) ───────────────────────────────────────────
+  Widget _buildProductCard() {
+    final p = _scannedProduct!;
+    final servG = p['serving_size_g'] as double;
+
+    double macro(String key) =>
+        (p['${key}_per_100g'] as double) * servG / 100 * _portionFactor;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // Product name + source
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.3)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Text('📦', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(p['name'],
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 17, fontWeight: FontWeight.w800))),
+            ]),
+            const SizedBox(height: 6),
+            Text('Per serving  ${servG.toStringAsFixed(0)}g',
+                style: const TextStyle(color: Colors.white38, fontSize: 12)),
+
+            const SizedBox(height: 16),
+
+            // Macros row
+            Row(children: [
+              _macroCell('${macro('calories').round()} kcal', 'Calories', const Color(0xFFFF5E00)),
+              _macroCell('${macro('protein').toStringAsFixed(1)}g', 'Protein', Colors.blueAccent),
+              _macroCell('${macro('carbs').toStringAsFixed(1)}g', 'Carbs', const Color(0xFFB9FF2B)),
+              _macroCell('${macro('fat').toStringAsFixed(1)}g', 'Fat', Colors.pinkAccent),
+            ]),
+
+            const SizedBox(height: 20),
+
+            const Text('How much did you eat?',
+                style: TextStyle(color: Colors.white70,
+                    fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+
+            // Portion chips
+            Row(children: [
+              _portionChip('Full', 1.0),
+              const SizedBox(width: 8),
+              _portionChip('Half', 0.5),
+              const SizedBox(width: 8),
+              _portionChip('¼', 0.25),
+            ]),
+
+            const SizedBox(height: 10),
+
+            Slider(
+              value: _portionFactor, min: 0.1, max: 1.0, divisions: 9,
+              activeColor: const Color(0xFFB9FF2B),
+              inactiveColor: Colors.white12,
+              onChanged: (v) => setState(() => _portionFactor = v),
+            ),
+            Text('${(_portionFactor * 100).round()}% of a serving',
+                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          ]),
+        ),
+
+        const SizedBox(height: 14),
+
+        Row(children: [
+          Expanded(child: ElevatedButton(
+            onPressed: _confirmSnack,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFB9FF2B), foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Log  •  ${macro('calories').round()} kcal',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          )),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: _resetToCamera,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey,
+              side: const BorderSide(color: Colors.white12),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Scan again'),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _macroCell(String value, String label, Color color) => Expanded(child: Column(children: [
+    Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+    const SizedBox(height: 2),
+    Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+  ]));
+
+  Widget _portionChip(String label, double value) {
+    final sel = (_portionFactor - value).abs() < 0.01;
     return Expanded(child: GestureDetector(
       onTap: () => setState(() => _portionFactor = value),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: sel ? Colors.greenAccent : Colors.grey[800],
+          color: sel ? const Color(0xFFB9FF2B) : Colors.white10,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(label, textAlign: TextAlign.center,
-            style: TextStyle(color: sel ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+            style: TextStyle(
+              color: sel ? Colors.black : Colors.white,
+              fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+              fontSize: 13,
+            )),
       ),
     ));
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MEAL SUGGESTION CARD
-//
-// Shown after step 3 completes. Features:
-//   - Confidence % bar (green/orange/red)
-//   - Source badge (📊 USDA = real database, 🤖 AI estimate = Gemini fallback)
-//   - Gram input pre-filled with Gemini's visual estimate
-//   - Quick gram chips (100g, 150g, 200g, 250g, 300g, 400g)
-//   - Live macro recalculation as grams change
-//   - Confirm button showing live kcal count
+// BARCODE BANNER
+// ─────────────────────────────────────────────────────────────────────────────
+class _BarcodeBanner extends StatelessWidget {
+  final String barcode;
+  final VoidCallback onConfirm;
+  final VoidCallback onDismiss;
+
+  const _BarcodeBanner({
+    required this.barcode,
+    required this.onConfirm,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+              color: const Color(0xFFB9FF2B).withOpacity(0.6), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFB9FF2B).withOpacity(0.12),
+              blurRadius: 20, spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFB9FF2B).withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.qr_code_scanner_rounded,
+                color: Color(0xFFB9FF2B), size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Barcode detected!',
+                style: TextStyle(color: Color(0xFFB9FF2B),
+                    fontSize: 12, fontWeight: FontWeight.w800)),
+            Text(barcode,
+                style: TextStyle(color: Colors.white.withOpacity(0.45),
+                    fontSize: 10, fontFamily: 'monospace'),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+          ])),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onDismiss,
+            child: const Icon(Icons.close_rounded, color: Colors.white30, size: 18)),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onConfirm,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFB9FF2B),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text('Look up',
+                  style: TextStyle(color: Colors.black,
+                      fontSize: 13, fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMALL CAMERA BUTTON (gallery / flip)
+// ─────────────────────────────────────────────────────────────────────────────
+class _CamButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String label;
+
+  const _CamButton({required this.icon, required this.onTap, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52, height: 52,
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 5),
+          Text(label, style: TextStyle(
+              color: Colors.white.withOpacity(0.55), fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORNER BRACKET PAINTER
+// ─────────────────────────────────────────────────────────────────────────────
+class _BracketPainter extends CustomPainter {
+  final Color color;
+  _BracketPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    const r = 10.0;
+    const l = 24.0;
+    final w = size.width;
+    final h = size.height;
+
+    // top-left
+    canvas.drawLine(Offset(r, 0), Offset(l, 0), paint);
+    canvas.drawLine(Offset(0, r), Offset(0, l), paint);
+    // top-right
+    canvas.drawLine(Offset(w - r, 0), Offset(w - l, 0), paint);
+    canvas.drawLine(Offset(w, r), Offset(w, l), paint);
+    // bottom-left
+    canvas.drawLine(Offset(0, h - r), Offset(0, h - l), paint);
+    canvas.drawLine(Offset(r, h), Offset(l, h), paint);
+    // bottom-right
+    canvas.drawLine(Offset(w, h - r), Offset(w, h - l), paint);
+    canvas.drawLine(Offset(w - r, h), Offset(w - l, h), paint);
+  }
+
+  @override
+  bool shouldRepaint(_BracketPainter old) => old.color != color;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MEAL SUGGESTION CARD (unchanged logic, same as before)
 // ─────────────────────────────────────────────────────────────────────────────
 class _MealSuggestionCard extends StatefulWidget {
   final Map<String, dynamic> suggestion;
@@ -622,9 +1093,9 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
     return v > 1.0 ? v / 100.0 : v;
   }
 
-  Color  get _confColor  => _confidence >= 0.75 ? Colors.greenAccent : _confidence >= 0.45 ? Colors.orangeAccent : Colors.redAccent;
-  String get _confLabel  => _confidence >= 0.75 ? 'High match' : _confidence >= 0.45 ? 'Possible' : 'Low confidence';
-  bool   get _isUSDA     => widget.suggestion['source'] == 'USDA';
+  Color  get _confColor => _confidence >= 0.75 ? const Color(0xFFB9FF2B) : _confidence >= 0.45 ? Colors.orangeAccent : Colors.redAccent;
+  String get _confLabel => _confidence >= 0.75 ? 'High match' : _confidence >= 0.45 ? 'Possible' : 'Low confidence';
+  bool   get _isUSDA    => widget.suggestion['source'] == 'USDA';
 
   void _updateGrams(String val) {
     final g = double.tryParse(val);
@@ -646,34 +1117,35 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // ── Header ─────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(name, style: const TextStyle(color: Colors.white,
+                    fontSize: 16, fontWeight: FontWeight.bold)),
                 if (usdaName != null && usdaName != name)
-                  Text('Matched: $usdaName', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  Text('Matched: $usdaName',
+                      style: const TextStyle(color: Colors.white38, fontSize: 11)),
               ])),
-              // Source badge: USDA = blue (real data), AI estimate = orange (Gemini)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _isUSDA ? Colors.blueAccent.withOpacity(0.15) : Colors.orangeAccent.withOpacity(0.15),
+                  color: _isUSDA
+                      ? Colors.blueAccent.withOpacity(0.15)
+                      : Colors.orangeAccent.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _isUSDA ? Colors.blueAccent.withOpacity(0.5) : Colors.orangeAccent.withOpacity(0.5)),
+                  border: Border.all(color: _isUSDA
+                      ? Colors.blueAccent.withOpacity(0.5)
+                      : Colors.orangeAccent.withOpacity(0.5)),
                 ),
-                child: Text(
-                  _isUSDA ? '📊 USDA' : '🤖 AI estimate',
-                  style: TextStyle(
-                    color: _isUSDA ? Colors.blueAccent : Colors.orangeAccent,
-                    fontSize: 10, fontWeight: FontWeight.bold),
-                ),
+                child: Text(_isUSDA ? '📊 USDA' : '🤖 AI estimate',
+                    style: TextStyle(
+                      color: _isUSDA ? Colors.blueAccent : Colors.orangeAccent,
+                      fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ]),
             const SizedBox(height: 10),
-            // Confidence progress bar
             Row(children: [
               Expanded(child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
@@ -683,23 +1155,25 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
               )),
               const SizedBox(width: 8),
               Text('$pct%  $_confLabel',
-                  style: TextStyle(color: _confColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: _confColor,
+                      fontSize: 10, fontWeight: FontWeight.bold)),
             ]),
           ]),
         ),
 
-        // ── Gram input ──────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               const Text('Estimated portion',
-                  style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: Colors.grey,
+                      fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(6)),
-                child: const Text('Gemini guessed this — adjust if needed',
+                decoration: BoxDecoration(color: Colors.white10,
+                    borderRadius: BorderRadius.circular(6)),
+                child: const Text('Adjust if needed',
                     style: TextStyle(color: Colors.white38, fontSize: 9)),
               ),
             ]),
@@ -710,14 +1184,24 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
                 child: TextField(
                   controller: _gramsController,
                   keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 18, fontWeight: FontWeight.bold),
                   decoration: InputDecoration(
-                    suffixText: 'g', suffixStyle: const TextStyle(color: Colors.grey, fontSize: 16),
+                    suffixText: 'g',
+                    suffixStyle: const TextStyle(color: Colors.grey, fontSize: 16),
                     filled: true, fillColor: Colors.black38,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white12)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white12)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.greenAccent, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Colors.white12)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Colors.white12)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFB9FF2B), width: 1.5)),
                   ),
                   onChanged: _updateGrams,
                 ),
@@ -728,17 +1212,22 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
                 child: Row(children: [100, 150, 200, 250, 300, 400].map((g) {
                   final sel = (_grams - g).abs() < 1;
                   return GestureDetector(
-                    onTap: () => setState(() { _grams = g.toDouble(); _gramsController.text = g.toString(); }),
+                    onTap: () => setState(() {
+                      _grams = g.toDouble();
+                      _gramsController.text = g.toString();
+                    }),
                     child: Container(
                       margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: sel ? Colors.greenAccent : Colors.grey[800],
+                        color: sel ? const Color(0xFFB9FF2B) : Colors.grey[800],
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text('${g}g', style: TextStyle(
-                        color: sel ? Colors.black : Colors.white,
-                        fontSize: 12, fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
+                          color: sel ? Colors.black : Colors.white,
+                          fontSize: 12,
+                          fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
                     ),
                   );
                 }).toList()),
@@ -749,23 +1238,22 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
 
         const SizedBox(height: 12),
 
-        // ── Live nutrition (recalculates as grams change) ───────────────
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12),
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+              color: Colors.black26, borderRadius: BorderRadius.circular(12)),
           child: Row(children: [
-            _nutriCell('${_cal.round()} kcal', 'Calories', Colors.orangeAccent),
+            _nutriCell('${_cal.round()} kcal', 'Calories', const Color(0xFFFF5E00)),
             _vDiv(),
             _nutriCell('${_prot}g', 'Protein', Colors.blueAccent),
             _vDiv(),
-            _nutriCell('${_carb}g', 'Carbs', Colors.greenAccent),
+            _nutriCell('${_carb}g', 'Carbs', const Color(0xFFB9FF2B)),
             _vDiv(),
             _nutriCell('${_fat}g', 'Fat', Colors.pinkAccent),
           ]),
         ),
 
-        // ── Confirm button ──────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
           child: SizedBox(
@@ -773,12 +1261,15 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
             child: ElevatedButton(
               onPressed: () => widget.onConfirm(_grams),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent, foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: const Color(0xFFB9FF2B),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
               child: Text('Log this  •  ${_cal.round()} kcal',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
             ),
           ),
         ),
@@ -786,11 +1277,13 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
     );
   }
 
-  Widget _nutriCell(String value, String label, Color color) => Expanded(child: Column(children: [
-    Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-    const SizedBox(height: 2),
-    Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-  ]));
+  Widget _nutriCell(String value, String label, Color color) =>
+      Expanded(child: Column(children: [
+        Text(value, style: TextStyle(color: color,
+            fontWeight: FontWeight.bold, fontSize: 12)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+      ]));
 
   Widget _vDiv() => Container(width: 1, height: 28, color: Colors.white12);
 }
