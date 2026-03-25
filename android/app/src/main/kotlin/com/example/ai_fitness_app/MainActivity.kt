@@ -23,19 +23,30 @@ class MainActivity : FlutterActivity() {
     private var sessionSink: EventChannel.EventSink? = null
 
     // ── Live frame results receiver ───────────────────────────────────────
-    private val resultReceiver = object : BroadcastReceiver() {
+    val resultReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.getBooleanExtra("stop", false)) return
-            val repCount = intent.getIntExtra(QuickPoseActivity.EXTRA_REP_COUNT, 0)
-            val feedback = intent.getStringExtra(QuickPoseActivity.EXTRA_FEEDBACK) ?: ""
-            val status   = intent.getStringExtra(QuickPoseActivity.EXTRA_STATUS)   ?: "loading"
+
+            val repCount     = intent.getIntExtra(
+                QuickPoseActivity.EXTRA_REP_COUNT, 0)
+            val feedback     = intent.getStringExtra(
+                QuickPoseActivity.EXTRA_FEEDBACK) ?: ""
+            val status       = intent.getStringExtra(
+                QuickPoseActivity.EXTRA_STATUS) ?: "loading"
+            val isTimer      = intent.getBooleanExtra("isTimer", false)
+            val isAtDepth    = intent.getBooleanExtra("isAtProperDepth", false)
+            // audioMessage is only present on encouragement/half rep broadcasts
+            // Empty string means this is a regular result broadcast
+            val audioMessage = intent.getStringExtra("audioMessage") ?: ""
+
             runOnUiThread {
                 eventSink?.success(mapOf(
                     "repCount"      to repCount,
                     "feedback"      to feedback,
                     "status"        to status,
-                    "exerciseState" to "",
-                    "fps"           to 0
+                    "isTimer"       to isTimer,
+                    "isAtProperDepth" to isAtDepth,
+                    "audioMessage"  to audioMessage,
                 ))
             }
         }

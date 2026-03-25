@@ -9,7 +9,7 @@ class AudioFeedbackService {
   // Minimum milliseconds between any two spoken messages.
   // 4 seconds gives enough time for the message to finish
   // and not overlap with the next one.
-  static const int _cooldownMs = 4000;
+  static const int _cooldownMs = 1500;
 
   DateTime? _lastSpokenAt;
   String    _lastMessage = '';
@@ -58,6 +58,24 @@ class AudioFeedbackService {
     _lastMessage  = message;
     await _tts.speak(message);
   }
+
+/// Speaks a priority message — used for encouragement and
+/// half rep warnings. Bypasses deduplication so the same
+/// message can fire again after the cooldown elapses.
+Future<void> speakPriority(String message) async {
+  if (!_isEnabled) return;
+  if (message.isEmpty) return;
+
+  final now = DateTime.now();
+  if (_lastSpokenAt != null) {
+    final elapsed = now.difference(_lastSpokenAt!).inMilliseconds;
+    if (elapsed < _cooldownMs) return;
+  }
+
+  _lastSpokenAt = now;
+  _lastMessage  = message;
+  await _tts.speak(message);
+}
 
   /// Speak rep count milestones called when rep count changes.
   /// Only announces at meaningful milestones to avoid constant chatter.
