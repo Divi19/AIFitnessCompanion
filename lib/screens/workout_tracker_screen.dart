@@ -28,16 +28,15 @@ class WorkoutTrackerScreen extends StatefulWidget {
 
 class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     with WidgetsBindingObserver {
+  final QuickPoseService _quickPoseService = QuickPoseService();
+  final WorkoutSessionService _sessionService = WorkoutSessionService();
+  final AudioFeedbackService _audioService = AudioFeedbackService();
 
-  final QuickPoseService      _quickPoseService = QuickPoseService();
-  final WorkoutSessionService _sessionService   = WorkoutSessionService();
-  final AudioFeedbackService  _audioService     = AudioFeedbackService();
-
-  bool   _hasPermission    = false;
-  bool   _isRunning        = false;
-  int    _repCount         = 0;
-  String _feedback         = '';
-  String _status           = 'idle';
+  bool _hasPermission = false;
+  bool _isRunning = false;
+  int _repCount = 0;
+  String _feedback = '';
+  String _status = 'idle';
   String _selectedExercise = 'squat';
 
   // Spinner shown while session is saving to Firestore
@@ -51,14 +50,14 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   bool _isTimerExercise(String exercise) => _timerExercises.contains(exercise);
 
   final Map<String, String> _exercises = {
-    'Squat':        'squat',
-    'Push Up':      'pushup',
-    'Bicep Curl':   'bicep_curl',
+    'Squat': 'squat',
+    'Push Up': 'pushup',
+    'Bicep Curl': 'bicep_curl',
     'Jumping Jack': 'jumping_jack',
-    'Left Lunge':   'lunge_left',
-    'Right Lunge':  'lunge_right',
-    'Sit Up':       'sit_up',
-    'Plank':        'plank',
+    'Left Lunge': 'lunge_left',
+    'Right Lunge': 'lunge_right',
+    'Sit Up': 'sit_up',
+    'Plank': 'plank',
     'Glute Bridge': 'glute_bridge',
   };
 
@@ -107,10 +106,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     _quickPoseService.resultsStream.listen((data) {
       if (!mounted) return;
 
-      final newRepCount = (data['repCount'] as int?)    ?? _repCount;
+      final newRepCount = (data['repCount'] as int?) ?? _repCount;
       final newFeedback = (data['feedback'] as String?) ?? '';
-      final newStatus   = (data['status']   as String?) ?? 'loading';
-      final newIsTimer  = (data['isTimer']  as bool?)   ?? false;
+      final newStatus = (data['status'] as String?) ?? 'loading';
+      final newIsTimer = (data['isTimer'] as bool?) ?? false;
 
       // Trigger audio for rep count if it changed
       if (newRepCount != _repCount) {
@@ -123,9 +122,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
       }
 
       setState(() {
-        _repCount    = newRepCount;
-        _feedback    = newFeedback;
-        _status      = newStatus;
+        _repCount = newRepCount;
+        _feedback = newFeedback;
+        _status = newStatus;
         _isTimerMode = newIsTimer;
       });
     }, onError: (e) => debugPrint('QuickPose error: $e'));
@@ -133,9 +132,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
 
   // ── Listen for valid session summaries from Kotlin ───────────────────────
   void _listenToSessions() {
-    _quickPoseService.sessionStream.listen(
-      (data) async {
-        if (!mounted) return;
+    _quickPoseService.sessionStream.listen((data) async {
+      if (!mounted) return;
 
         final exercise      = data['exercise']      as String;
         final reps          = data['reps']          as int;
@@ -144,7 +142,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
         // avgJointAngle is null when landmarks weren't visible — handled gracefully
         final avgJointAngle = data['avgJointAngle'] as double?;
 
-        setState(() => _savingSession = true);
+      setState(() => _savingSession = true);
 
         // Save to Firestore and generate debrief
         final session = await _sessionService.saveSession(
@@ -155,36 +153,38 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
           avgJointAngle: avgJointAngle,
         );
 
-        if (!mounted) return;
-        setState(() => _savingSession = false);
+      if (!mounted) return;
+      setState(() => _savingSession = false);
 
-        if (session != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle,
-                      color: Color(0xFFB9FF2B), size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Session saved — ${session.reps} ${session.exerciseDisplayName} reps',
-                      style: const TextStyle(color: Colors.white),
-                    ),
+      if (session != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFFB9FF2B),
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Session saved — ${session.reps} ${session.exerciseDisplayName} reps',
+                    style: const TextStyle(color: Colors.white),
                   ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF1A1A1A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              duration: const Duration(seconds: 3),
+                ),
+              ],
             ),
-          );
-        }
-      },
-      onError: (e) => debugPrint('Session stream error: $e'),
-    );
+            backgroundColor: const Color(0xFF1A1A1A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }, onError: (e) => debugPrint('Session stream error: $e'));
   }
 
   Future<void> _startWorkout() async {
@@ -196,10 +196,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
     if (!mounted) return;
 
     setState(() {
-      _isRunning   = true;
-      _repCount    = 0;
-      _feedback    = '';
-      _status      = 'loading';
+      _isRunning = true;
+      _repCount = 0;
+      _feedback = '';
+      _status = 'loading';
       _isTimerMode = _isTimerExercise(_selectedExercise);
     });
     await _quickPoseService.startCamera(_selectedExercise);
@@ -208,10 +208,10 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   Future<void> _switchExercise(String exerciseKey) async {
     setState(() {
       _selectedExercise = exerciseKey;
-      _repCount         = 0;
-      _feedback         = '';
-      _status           = 'loading';
-      _isTimerMode      = _isTimerExercise(exerciseKey);
+      _repCount = 0;
+      _feedback = '';
+      _status = 'loading';
+      _isTimerMode = _isTimerExercise(exerciseKey);
     });
     if (_isRunning) {
       await _quickPoseService.switchExercise(exerciseKey);
@@ -226,7 +226,6 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
             // ── Header ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -250,100 +249,25 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFFB9FF2B)),
-                      ),
-                    ),
-
-                  // How To — rewatch exercise video at any time
-                  GestureDetector(
-                    onTap: () =>
-                        showExercisePreview(context, _selectedExercise),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.play_circle_outline,
-                              color: Colors.white54, size: 16),
-                          SizedBox(width: 6),
-                          Text(
-                            'How to',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Audio toggle button
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _audioService.setEnabled(!_audioService.isEnabled);
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _audioService.isEnabled
-                            ? const Color(0xFFB9FF2B).withOpacity(0.15)
-                            : Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _audioService.isEnabled
-                              ? const Color(0xFFB9FF2B).withOpacity(0.5)
-                              : Colors.white12,
+                          strokeWidth: 2,
+                          color: Color(0xFFB9FF2B),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _audioService.isEnabled
-                                ? Icons.volume_up
-                                : Icons.volume_off,
-                            color: _audioService.isEnabled
-                                ? const Color(0xFFB9FF2B)
-                                : Colors.white38,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _audioService.isEnabled ? 'Audio ON' : 'Audio OFF',
-                            style: TextStyle(
-                              color: _audioService.isEnabled
-                                  ? const Color(0xFFB9FF2B)
-                                  : Colors.white38,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
 
                   // LIVE badge — shown when pose tracking is active
                   if (_status == 'success')
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFB9FF2B).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: const Color(0xFFB9FF2B).withOpacity(0.5)),
+                          color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                        ),
                       ),
                       child: const Text(
                         'LIVE',
@@ -368,7 +292,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                   Text(
                     _isTimerMode
                         ? _formatTime(_repCount) // Shows MM:SS for timer
-                        : '$_repCount',          // Shows number for reps
+                        : '$_repCount', // Shows number for reps
                     style: const TextStyle(
                       color: Color(0xFFB9FF2B),
                       fontSize: 100,
@@ -378,8 +302,7 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                   ),
                   Text(
                     _isTimerMode ? 'elapsed' : 'reps',
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 18),
+                    style: const TextStyle(color: Colors.white38, fontSize: 18),
                   ),
                 ],
               ),
@@ -393,25 +316,134 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF5E00).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                        color: const Color(0xFFFF5E00).withOpacity(0.5)),
+                      color: const Color(0xFFFF5E00).withOpacity(0.5),
+                    ),
                   ),
                   child: Text(
                     _feedback,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500),
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
 
             const Spacer(),
+
+            // ── How To + Audio Buttons ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Row(
+                children: [
+                  // How To button
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () =>
+                          showExercisePreview(context, _selectedExercise),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFFF5E00),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.play_circle_outline,
+                              color: Color(0xFFFF5E00),
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'How To',
+                              style: TextStyle(
+                                color: Color(0xFFFF5E00),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _audioService.setEnabled(!_audioService.isEnabled);
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 48,
+                        decoration: BoxDecoration(
+                          // Green background fill when ON, transparent when OFF
+                          color: _audioService.isEnabled
+                              ? const Color(0xFFB9FF2B).withOpacity(0.12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            // Green border when ON, orange when OFF
+                            color: _audioService.isEnabled
+                                ? const Color(0xFFB9FF2B)
+                                : const Color(0xFFFF5E00),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _audioService.isEnabled
+                                  ? Icons.volume_up
+                                  : Icons.volume_off,
+                              // Green icon when ON, orange when OFF
+                              color: _audioService.isEnabled
+                                  ? const Color(0xFFB9FF2B)
+                                  : const Color(0xFFFF5E00),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _audioService.isEnabled
+                                  ? 'Audio ON'
+                                  : 'Audio OFF',
+                              style: TextStyle(
+                                // Green text when ON, orange when OFF
+                                color: _audioService.isEnabled
+                                    ? const Color(0xFFB9FF2B)
+                                    : const Color(0xFFFF5E00),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             // ── Exercise Selector ─────────────────────────────────────────
             Padding(
@@ -439,7 +471,9 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFFB9FF2B)
@@ -482,7 +516,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                     backgroundColor: const Color(0xFFFF5E00),
                     disabledBackgroundColor: Colors.white12,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     elevation: 0,
                   ),
                   child: _isRunning
@@ -498,8 +533,11 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.camera_alt,
-                                color: Colors.white, size: 20),
+                            const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Text(
                               _hasPermission
