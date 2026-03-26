@@ -495,10 +495,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // ── Angle data ────────────────────────────────────────────────────────
-    // anglePoints: all sets that have landmark data
-    // latestAngle: most recent set with data → the bright actionable tick
-    // allTimeAvg:  average across all sets → the faded historical tick
     final anglePoints = _points
         ?.where((p) => p.avgJointAngle != null)
         .toList() ?? [];
@@ -609,11 +605,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
             if (_points != null && _points!.isNotEmpty)
               _buildSessionLegend(_points!),
 
-            // ── Joint angle comparison ────────────────────────────────────
-            // Shown when we have at least one angle reading AND the exercise
-            // has an ideal range defined. Shows two ticks:
-            //   bright = latest session (actionable)
-            //   faded  = all-time average (context), only if 2+ data points
             if (latestAngle != null &&
                 kIdealAngles.containsKey(widget.exercise)) ...[
               const SizedBox(height: 24),
@@ -963,10 +954,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     );
   }
 
-  // ── Joint angle comparison — dual tick ───────────────────────────────────
-  // latestAngle : angle from the most recent set (bright tick — act on this)
-  // allTimeAvg  : average across all sets (faded tick — context only)
-  //               null when there is only one data point
   Widget _buildAngleComparison(double latestAngle, double? allTimeAvg) {
     final ideal          = kIdealAngles[widget.exercise]!;
     final exerciseColour = widget.colour;
@@ -1003,7 +990,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      // ── No grey fill — fully transparent background ───────────────────
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(14),
@@ -1012,7 +998,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ───────────────────────────────────────────────────────
           Row(
             children: [
               Icon(Icons.straighten_rounded, color: exerciseColour, size: 14),
@@ -1051,22 +1036,17 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 : null;
             final idealCentrePx = totalWidth * (idealStartFrac + idealEndFrac) / 2;
 
-            // Label box width
             const labelW = 58.0;
             const labelH = 34.0;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ── Above-bar labels: Latest (bright) + Avg (dimmer) ──────
-                // Labels sit ABOVE the bar, pinned to their tick positions
                 SizedBox(
                   height: labelH,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // Latest label — full brightness
                       Positioned(
                         left: (latestPx - labelW / 2).clamp(0.0, totalWidth - labelW),
                         top: 0,
@@ -1097,7 +1077,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                           ),
                         ),
                       ),
-                      // Avg label — dimmer, only if 2+ sessions
                       if (avgPx != null && allTimeAvg != null)
                         Positioned(
                           left: (avgPx - labelW / 2).clamp(0.0, totalWidth - labelW),
@@ -1135,14 +1114,11 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
 
                 const SizedBox(height: 6),
 
-                // ── Bar ───────────────────────────────────────────────────
-                // Taller, bolder, more defined
                 SizedBox(
                   height: 24,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // Background track — slightly brighter so it reads clearly
                       Positioned(
                         top: 6, left: 0, right: 0,
                         child: Container(
@@ -1153,7 +1129,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                           ),
                         ),
                       ),
-                      // Ideal zone — full exercise colour, bold fill
                       Positioned(
                         left: totalWidth * idealStartFrac,
                         width: totalWidth * (idealEndFrac - idealStartFrac),
@@ -1166,7 +1141,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                           ),
                         ),
                       ),
-                      // Average tick — medium width, dimmer
                       if (avgPx != null)
                         Positioned(
                           left: (avgPx - 2.0).clamp(0.0, totalWidth - 4),
@@ -1180,7 +1154,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                             ),
                           ),
                         ),
-                      // Latest tick — widest, full brightness, tallest
                       Positioned(
                         left: (latestPx - 3.0).clamp(0.0, totalWidth - 6),
                         top: 0,
@@ -1197,13 +1170,10 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                   ),
                 ),
 
-                // ── Below-bar: axis edges + ideal zone label centred ──────
                 const SizedBox(height: 5),
                 Stack(
                   children: [
-                    // Full-width spacer so Stack sizes correctly
                     SizedBox(width: totalWidth, height: 16),
-                    // Left axis label
                     Positioned(
                       left: 0, top: 0,
                       child: Text('0°',
@@ -1211,7 +1181,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                               color: exerciseColour.withOpacity(0.45),
                               fontSize: 9)),
                     ),
-                    // Right axis label
                     Positioned(
                       right: 0, top: 0,
                       child: Text('${ideal.scale.toInt()}°',
@@ -1219,7 +1188,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                               color: exerciseColour.withOpacity(0.45),
                               fontSize: 9)),
                     ),
-                    // Ideal zone label centred under the green zone
                     Positioned(
                       left: (idealCentrePx - 40).clamp(0.0, totalWidth - 80),
                       top: 0,
@@ -1246,7 +1214,6 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
           Divider(color: exerciseColour.withOpacity(0.2), height: 1),
           const SizedBox(height: 12),
 
-          // ── Status line ───────────────────────────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2101,10 +2068,11 @@ class _CardDeckState extends State<_CardDeck> {
 
     return Container(
       decoration: BoxDecoration(
+        // ── Changed from orange (0xFF2E1200/0xFF110500) to deep indigo/purple
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2E1200), Color(0xFF110500)],
+          colors: [Color(0xFF1A1040), Color(0xFF0D0920)],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0xFF9B8FFF), width: 2),
@@ -2205,10 +2173,11 @@ class _CardGenerationPlaceholder extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 12),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
+          // ── Changed from orange (0xFF2E1200/0xFF110500) to deep indigo/purple
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF2E1200), Color(0xFF110500)],
+            colors: [Color(0xFF1A1040), Color(0xFF0D0920)],
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
