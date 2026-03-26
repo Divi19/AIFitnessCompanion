@@ -59,23 +59,24 @@ class AudioFeedbackService {
     await _tts.speak(message);
   }
 
-/// Speaks a priority message — used for encouragement and
-/// half rep warnings. Bypasses deduplication so the same
-/// message can fire again after the cooldown elapses.
-Future<void> speakPriority(String message) async {
-  if (!_isEnabled) return;
-  if (message.isEmpty) return;
+  /// Speaks a priority message — used for encouragement and
+  /// half rep warnings. Bypasses deduplication so the same
+  /// message can repeat after cooldown.
+  Future<void> speakPriority(String message) async {
+    if (!_isEnabled) return;
+    if (message.isEmpty) return;
 
-  final now = DateTime.now();
-  if (_lastSpokenAt != null) {
-    final elapsed = now.difference(_lastSpokenAt!).inMilliseconds;
-    if (elapsed < _cooldownMs) return;
+    final now = DateTime.now();
+    if (_lastSpokenAt != null) {
+      final elapsed = now.difference(_lastSpokenAt!).inMilliseconds;
+      if (elapsed < _cooldownMs) return;
+    }
+
+    // No deduplication check — same message can repeat after cooldown
+    _lastSpokenAt = now;
+    _lastMessage  = message;
+    await _tts.speak(message);
   }
-
-  _lastSpokenAt = now;
-  _lastMessage  = message;
-  await _tts.speak(message);
-}
 
   /// Speak rep count milestones called when rep count changes.
   /// Only announces at meaningful milestones to avoid constant chatter.

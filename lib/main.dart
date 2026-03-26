@@ -23,9 +23,7 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 30 << 20; // 30 MB
 
   AppConstants.assertKeysLoaded();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -64,7 +62,8 @@ class AuthGate extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
-                child: CircularProgressIndicator(color: Color(0xFFC5F135))),
+              child: CircularProgressIndicator(color: Color(0xFFB9FF2B)),
+            ),
           );
         }
         if (!snapshot.hasData || snapshot.data == null) return const AuthScreen();
@@ -79,13 +78,18 @@ class AuthGate extends StatelessWidget {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(
-                    child: CircularProgressIndicator(color: Color(0xFFC5F135))),
+                  child: CircularProgressIndicator(color: Color(0xFFB9FF2B)),
+                ),
               );
             }
-            final userData =
-                userSnapshot.data?.data() as Map<String, dynamic>?;
+
+            final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
             final isProfileCompleted = userData?['profile_completed'] == true;
-            if (isProfileCompleted) return const RootNavigationScaffold();
+
+            if (isProfileCompleted) {
+              return const RootNavigationScaffold();
+            }
+
             return const InjuryProfileScreen();
           },
         );
@@ -132,6 +136,39 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
           ),
         ],
       ),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.white10, width: 1)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          backgroundColor: const Color(0xFF0D0D0D),
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: const Color(0xFFB9FF2B),
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_filled),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble),
+              label: 'Assistant',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.camera_alt),
+              label: 'Pose',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.restaurant),
+              label: 'Meals',
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -145,10 +182,7 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
       maintainState: true,      // keeps state alive — camera never reinitialises
       maintainAnimation: true,
       maintainSize: true,
-      child: IgnorePointer(
-        ignoring: _currentIndex != index,
-        child: child,
-      ),
+      child: IgnorePointer(ignoring: _currentIndex != index, child: child),
     );
   }
 }
@@ -263,55 +297,76 @@ class HomeDashboardTab extends StatefulWidget {
 
 class _HomeDashboardTabState extends State<HomeDashboardTab> {
   Future<void> _updateFatigue(
-      BuildContext context, String uid, int currentFatigue) async {
+    BuildContext context,
+    String uid,
+    int currentFatigue,
+  ) async {
     int? newFatigue = await showDialog<int>(
       context: context,
       builder: (context) {
         int tempFatigue = currentFatigue;
-        return StatefulBuilder(builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1A1A2E),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Set Fatigue Level',
-                style: TextStyle(color: Colors.white)),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              Slider(
-                value: tempFatigue.toDouble(),
-                min: 1, max: 10, divisions: 9,
-                activeColor: const Color(0xFFC5F135),
-                inactiveColor: Colors.white24,
-                label: tempFatigue.toString(),
-                onChanged: (val) =>
-                    setState(() => tempFatigue = val.toInt()),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              Text('Level: $tempFatigue/10',
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 16)),
-            ]),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child:
-                    const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              title: const Text(
+                'Set Fatigue Level',
+                style: TextStyle(color: Colors.white),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, tempFatigue),
-                child: const Text('Save',
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Slider(
+                    value: tempFatigue.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    activeColor: const Color(0xFFB9FF2B),
+                    inactiveColor: Colors.white24,
+                    label: tempFatigue.toString(),
+                    onChanged: (val) {
+                      setState(() {
+                        tempFatigue = val.toInt();
+                      });
+                    },
+                  ),
+                  Text(
+                    'Level: $tempFatigue/10',
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, tempFatigue),
+                  child: const Text(
+                    'Save',
                     style: TextStyle(
-                        color: Color(0xFFC5F135),
-                        fontWeight: FontWeight.bold)),
-              ),
-            ],
-          );
-        });
+                      color: Color(0xFFB9FF2B),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
     if (newFatigue != null && newFatigue != currentFatigue) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'fatigue_score': newFatigue});
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'fatigue_score': newFatigue,
+      });
     }
   }
 
@@ -328,17 +383,16 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
         builder: (context, userSnapshot) {
           if (!userSnapshot.hasData) {
             return const Center(
-                child: CircularProgressIndicator(color: Color(0xFFC5F135)));
+              child: CircularProgressIndicator(color: Color(0xFFB9FF2B)),
+            );
           }
 
-          final data =
-              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          final name    = data['name']           ?? 'Athlete';
-          final streak  = data['current_streak'] ?? 0;
-          final fatigue = data['fatigue_score']  ?? 5;
+          final data = userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final name = data['name'] ?? 'Athlete';
+          final streak = data['current_streak'] ?? 0;
+          final fatigue = data['fatigue_score'] ?? 5;
 
-          final bodyStats =
-              data['body_stats'] as Map<String, dynamic>? ?? {};
+          final bodyStats = data['body_stats'] as Map<String, dynamic>? ?? {};
           final healthInsights =
               data['health_insights'] as Map<String, dynamic>? ?? {};
 
@@ -350,9 +404,9 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               bodyStats['target_weight']?.toString();
           final targetWeightStr = targetWeightRaw != null
               ? (targetWeightRaw.contains('kg') ||
-                      targetWeightRaw.contains('lbs')
-                  ? targetWeightRaw
-                  : '$targetWeightRaw $unit')
+                        targetWeightRaw.contains('lbs')
+                    ? targetWeightRaw
+                    : '$targetWeightRaw $unit')
               : currentWeightStr;
 
           final recommendedCalories =
@@ -361,7 +415,7 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
               ? const Color(0xFFFF7B6B)
               : const Color(0xFFC5F135);
 
-          final now   = DateTime.now();
+          final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
 
           return StreamBuilder<QuerySnapshot>(
@@ -369,8 +423,10 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 .collection('meals')
                 .doc(uid)
                 .collection('logs')
-                .where('timestamp',
-                    isGreaterThanOrEqualTo: Timestamp.fromDate(today))
+                .where(
+                  'timestamp',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(today),
+                )
                 .snapshots(),
             builder: (context, mealSnapshot) {
               double totalCal = 0;
@@ -380,35 +436,262 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   totalCal += (d['calories'] as num?)?.toDouble() ?? 0.0;
                 }
               }
-              final int currentIntake = totalCal.round();
-              double calorieProgress = currentIntake /
+              final int currentIntake = totalCaloriesDouble.round();
+
+              double calorieProgress =
+                  currentIntake /
                   (recommendedCalories > 0 ? recommendedCalories : 1);
               if (calorieProgress > 1.0) calorieProgress = 1.0;
 
               // Extra bottom padding so content clears the floating navbar
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 120),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Header ────────────────────────────────────────
+                    // ── Greeting ──────────────────────────────────────────
+                    Center(
+                      child: Column(
+                        children: [
+                          const Text(
+                            'welcome back,',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Color(0xFFB9FF2B),
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Text(
+                            name.toString().split(' ').first,
+                            style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // ── Weight Goal Card ──────────────────────────────────
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 24,
+                        horizontal: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFFB9FF2B).withOpacity(0.5),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFB9FF2B).withOpacity(0.15),
+                            blurRadius: 30,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            targetWeightStr,
+                            style: const TextStyle(
+                              fontSize: 42,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFB9FF2B),
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'current weight: $currentWeightStr',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // ── Active Workout Plan (kevin branch) ────────────────
+                    // Shows real Firestore data — replaces the old hardcoded
+                    // checklist that referenced undefined step1/step2 vars.
+                    const Text(
+                      "Active Workout Plan:",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB9FF2B),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildActiveWorkoutCard(context, uid),
+
+                    const SizedBox(height: 32),
+
+                    // ── Generate Routine Button ───────────────────────────
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFFF5E00),
+                            const Color(0xFFFF5E00).withOpacity(0.8),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF5E00).withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const WorkoutBuilderScreen(),
+                            ),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: 24,
+                              horizontal: 24,
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(Icons.bolt, size: 36, color: Colors.white),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Generate Routine',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // ── Calories Progress Bar ─────────────────────────────
+                    const Text(
+                      "Calories Intake:",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB9FF2B),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: LinearProgressIndicator(
+                        value: calorieProgress,
+                        minHeight: 24,
+                        backgroundColor: const Color(
+                          0xFFFF5E00,
+                        ).withOpacity(0.15),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFFF5E00),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        RichText(
-                          text: const TextSpan(
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                letterSpacing: -0.5),
-                            children: [
-                              TextSpan(text: 'FIT'),
-                              TextSpan(
-                                  text: 'SENSE',
-                                  style:
-                                      TextStyle(color: Color(0xFFC5F135))),
-                            ],
+                        Text(
+                          'Intake: $currentIntake kcal',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Goal: $recommendedCalories kcal',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Scan Meal Button ──────────────────────────────────
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MealTrackerScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.camera_alt, size: 20),
+                      label: const Text(
+                        'Scan a Meal',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A1A1A),
+                        foregroundColor: const Color(0xFFFF5E00),
+                        side: BorderSide(
+                          color: const Color(0xFFFF5E00).withOpacity(0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 24),
+
+                    // ── Vitals Row ────────────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildVitalCard(
+                            title: 'Day Streak',
+                            value: '$streak',
+                            icon: Icons.local_fire_department,
+                            bgColor: const Color(0xFFFF5E00).withOpacity(0.15),
+                            textColor: const Color(0xFFFF5E00),
+                            borderColor: const Color(
+                              0xFFFF5E00,
+                            ).withOpacity(0.5),
                           ),
                         ),
                         Container(
@@ -619,16 +902,12 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                               width: 1, height: 40, color: Colors.white10),
                           GestureDetector(
                             onTap: () => _updateFatigue(
-                                context,
-                                uid,
-                                fatigue is int
-                                    ? fatigue
-                                    : (fatigue as num).toInt()),
-                            child: _buildVitalMini(
-                                icon: Icons.battery_charging_full,
-                                color: fatigueColor,
-                                value: '$fatigue',
-                                label: 'Fatigue'),
+                              context,
+                              uid,
+                              fatigue is int
+                                  ? fatigue
+                                  : (fatigue as num).toInt(),
+                            ),
                           ),
                           Container(
                               width: 1, height: 40, color: Colors.white10),
@@ -729,17 +1008,20 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 color: const Color(0xFF1A1A2E),
                 borderRadius: BorderRadius.circular(24)),
             child: const Center(
-                child: CircularProgressIndicator(
-                    color: Color(0xFFC5F135), strokeWidth: 2)),
+              child: CircularProgressIndicator(
+                color: Color(0xFFFF5E00),
+                strokeWidth: 2,
+              ),
+            ),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return GestureDetector(
             onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const WorkoutBuilderScreen())),
+              context,
+              MaterialPageRoute(builder: (_) => const WorkoutBuilderScreen()),
+            ),
             child: Container(
               height: 170,
               padding: const EdgeInsets.all(24),
@@ -748,50 +1030,66 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.white10),
               ),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16)),
-                  child: const Icon(Icons.fitness_center,
-                      color: Colors.white24, size: 32),
-                ),
-                const SizedBox(width: 20),
-                const Expanded(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.fitness_center,
+                      color: Colors.white24,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
                     child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('No Active Plan',
-                        style: TextStyle(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No Active Plan',
+                          style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18)),
-                    SizedBox(height: 6),
-                    Text('Tap to generate your first workout',
-                        style: TextStyle(
-                            color: Color(0xFF6B6B8A), fontSize: 13)),
-                  ],
-                )),
-              ]),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Tap to generate your first workout',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.white24,
+                    size: 14,
+                  ),
+                ],
+              ),
             ),
           );
         }
 
-        final doc       = snapshot.data!.docs.first;
-        final plan      = doc.data() as Map<String, dynamic>;
-        final planId    = doc.id;
-        final goal      = plan['goal']      as String? ?? 'Workout Plan';
-        final duration  = plan['duration']  as String? ?? '';
-        final imageUrl  = plan['imageUrl']  as String? ?? '';
+        final doc = snapshot.data!.docs.first;
+        final plan = doc.data() as Map<String, dynamic>;
+        final planId = doc.id;
+        final goal = plan['goal'] as String? ?? 'Workout Plan';
+        final days = plan['daysPerWeek'];
+        final duration = plan['duration'] as String? ?? '';
+        final level = plan['fitnessLevel'] as String? ?? '';
         final expiresAt = plan['expiresAt'] as Timestamp?;
 
-        bool   isExpired   = false;
+        bool isExpired = false;
         String expiryLabel = '';
         if (expiresAt != null) {
           final diff = expiresAt.toDate().difference(DateTime.now());
-          isExpired   = diff.isNegative;
+          isExpired = diff.isNegative;
           expiryLabel = isExpired
               ? 'Expired'
               : 'Expires in ${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'}';
@@ -811,20 +1109,22 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                   progSnap.data!.data() as Map<String, dynamic>? ?? {};
               final completed =
                   progData['progress'] as Map<String, dynamic>? ?? {};
-              final done =
-                  completed.values.where((v) => v == true).length;
+              final done = completed.values.where((v) => v == true).length;
               final total = completed.length;
               if (total > 0) progress = done / total;
             }
 
             return GestureDetector(
               onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => WorkoutPlanScreen(
-                          plan: plan['plan'] as String? ?? '',
-                          planId: planId,
-                          uid: uid))),
+                context,
+                MaterialPageRoute(
+                  builder: (_) => WorkoutPlanScreen(
+                    plan: plan['plan'] as String? ?? '',
+                    planId: planId,
+                    uid: uid,
+                  ),
+                ),
+              ),
               child: Container(
                 height: 170,
                 clipBehavior: Clip.hardEdge,
@@ -838,144 +1138,207 @@ class _HomeDashboardTabState extends State<HomeDashboardTab> {
                         offset: const Offset(0, 4))
                   ],
                 ),
-                child: Stack(children: [
-                  if (imageUrl.isNotEmpty)
-                    Positioned(
-                      right: -30, bottom: -20,
-                      height: 220, width: 200,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(30)),
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.centerLeft,
-                          placeholder: (context, url) =>
-                              Container(color: const Color(0xFF2A2A2A)),
-                          errorWidget: (context, url, error) => Container(
-                            color: const Color(0xFF1A1A2A),
-                            child: const Icon(Icons.fitness_center,
-                                color: Color(0xFF3A3A3A), size: 60),
-                          ),
-                          memCacheHeight: 300,
-                          memCacheWidth: 300,
-                        ),
-                      ),
-                    )
-                  else
-                    Positioned(
-                      right: -30, bottom: -20,
-                      height: 220, width: 200,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF2A2A2A),
-                          borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(30)),
-                        ),
-                        child: const Icon(Icons.fitness_center,
-                            color: Color(0xFF3A3A3A), size: 60),
-                      ),
-                    ),
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF1A1A2E),
-                            const Color(0xFF1A1A2E).withOpacity(0.7),
-                            Colors.transparent,
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 16, right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isExpired
-                            ? const Color(0xFFFF7B6B)
-                            : const Color(0xFFC5F135),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isExpired
-                                ? const Color(0xFFFF7B6B).withOpacity(0.3)
-                                : const Color(0xFFC5F135).withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: Text(
-                        isExpired ? 'EXPIRED' : 'ACTIVE',
-                        style: TextStyle(
-                          color: isExpired
-                              ? Colors.white
-                              : const Color(0xFF2D4A00),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Goal + active/expired badge
+                    Row(
                       children: [
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width * 0.5,
-                          child: Text(goal,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  height: 1.1)),
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF5E00).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.fitness_center,
+                            color: Color(0xFFFF5E00),
+                            size: 20,
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          duration.isNotEmpty
-                              ? 'Duration · $duration'
-                              : expiryLabel,
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF9B8FFF)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            goal,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        const SizedBox(height: 20),
-                        Row(children: [
-                          SizedBox(
-                            width: 24, height: 24,
-                            child: CircularProgressIndicator(
-                              value: progress, strokeWidth: 3,
-                              backgroundColor: Colors.white10,
-                              color: const Color(0xFFC5F135),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isExpired
+                                ? Colors.red.withOpacity(0.15)
+                                : const Color(0xFFB9FF2B).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            isExpired ? 'Expired' : 'Active',
+                            style: TextStyle(
+                              color: isExpired
+                                  ? Colors.redAccent
+                                  : const Color(0xFFB9FF2B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Text('${(progress * 100).toInt()}% Done',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700)),
-                        ]),
+                        ),
                       ],
                     ),
-                  ),
-                ]),
+                    const SizedBox(height: 14),
+                    const Divider(color: Colors.white10, height: 1),
+                    const SizedBox(height: 14),
+                    // Progress bar
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: Colors.white10,
+                              valueColor: const AlwaysStoppedAnimation(
+                                Color(0xFFFF5E00),
+                              ),
+                              minHeight: 6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${(progress * 100).round()}%',
+                          style: const TextStyle(
+                            color: Color(0xFFFF5E00),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Stats row
+                    Row(
+                      children: [
+                        Flexible(
+                          child: _miniStat(
+                            Icons.calendar_today_outlined,
+                            '${days ?? '?'} days/wk',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: _miniStat(Icons.timer_outlined, duration),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(child: _miniStat(Icons.bar_chart, level)),
+                        const SizedBox(width: 8),
+                        if (expiryLabel.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              expiryLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isExpired
+                                    ? Colors.redAccent
+                                    : Colors.white38,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _miniStat(IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white38, size: 12),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVitalCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color bgColor,
+    required Color textColor,
+    Color? borderColor,
+    VoidCallback? onTap,
+    String? subtitle,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor ?? Colors.transparent),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: textColor, size: 24),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textColor.withOpacity(0.8),
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: textColor.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
