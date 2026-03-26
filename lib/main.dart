@@ -108,30 +108,21 @@ class _RootNavigationScaffoldState extends State<RootNavigationScaffold> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      // Stack so the floating navbar sits on top of content
-      body: Stack(
-        children: [
-          // ── All tabs kept alive, just hidden ──────────────────────────
-          _buildTab(0, const HomeDashboardTab()),
-          _buildTab(1, const NutritionAssistantScreen()),
-          _buildTab(2, const WorkoutTrackerScreen()),
-          _buildTab(3, const MealTrackerScreen()),
-          _buildTab(4, const ProfileScreen()),
-
-          // ── Floating bottom nav overlaid at the bottom ─────────────────
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
-            child: _FloatingNav(
-              currentIndex: _currentIndex,
-              onTap: (i) => setState(() => _currentIndex = i),
-            ),
-          ),
-        ],
-      ),
-    );
+    backgroundColor: const Color(0xFF0D0D0D),
+    body: Stack(
+      children: [
+        _buildTab(0, const HomeDashboardTab()),
+        _buildTab(1, const NutritionAssistantScreen()),
+        _buildTab(2, const WorkoutTrackerScreen()),
+        _buildTab(3, const MealTrackerScreen()),
+        _buildTab(4, const ProfileScreen()),
+      ],
+    ),
+    bottomNavigationBar: _FloatingNav(
+      currentIndex: _currentIndex,
+      onTap: (i) => setState(() => _currentIndex = i),
+    ),
+  );
   }
 
   // ── CAMERA FIX ────────────────────────────────────────────────────────────
@@ -167,73 +158,72 @@ class _FloatingNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A).withOpacity(0.95),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+        color: const Color(0xFF0D0D0D),
+        border: const Border(top: BorderSide(color: Colors.white10, width: 1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
-            blurRadius: 30,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: const Color(0xFFC5F135).withOpacity(0.05),
+            color: Colors.black.withOpacity(0.4),
             blurRadius: 20,
-            offset: const Offset(0, 2),
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(_items.length, (i) {
-          final item     = _items[i];
-          final isActive = i == currentIndex;
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(_items.length, (i) {
+              final item = _items[i];
+              final isActive = i == currentIndex;
 
-          return GestureDetector(
-            onTap: () => onTap(i),
-            behavior: HitTestBehavior.opaque,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-              padding: isActive
-                  ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
-                  : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive ? const Color(0xFFC5F135) : Colors.transparent,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFFC5F135).withOpacity(0.3),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
+              return GestureDetector(
+                onTap: () => onTap(i),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  padding: isActive
+                      ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+                      : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFFC5F135) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFC5F135).withOpacity(0.3),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
+                        : [],
+                  ),
+                  child: isActive
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(item.icon, color: const Color(0xFF1A1A1A), size: 17),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.label,
+                              style: const TextStyle(
+                                color: Color(0xFF1A1A1A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                          ],
                         )
-                      ]
-                    : [],
-              ),
-              child: isActive
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(item.icon, color: const Color(0xFF1A1A1A), size: 17),
-                        const SizedBox(width: 6),
-                        Text(
-                          item.label,
-                          style: const TextStyle(
-                            color: Color(0xFF1A1A1A),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Icon(item.icon, color: Colors.white.withOpacity(0.4), size: 22),
-            ),
-          );
-        }),
+                      : Icon(item.icon, color: Colors.white.withOpacity(0.4), size: 22),
+                ),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }
