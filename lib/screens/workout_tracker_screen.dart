@@ -75,52 +75,52 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
   bool _isTimerExercise(String exercise) => _timerExercises.contains(exercise);
 
   // FIX 1: Images are stored as static const — defined once, never rebuilt.
-  // Lower resolution (w=200) reduces memory per image significantly.
+  // resolution (w=400) reduces memory per image significantly.
   static const List<Map<String, String>> _exerciseVisuals = [
     {
       'name': 'Squat',
       'key': 'squat',
-      'image': 'https://images.pexels.com/photos/4384679/pexels-photo-4384679.jpeg?auto=compress&cs=tinysrgb&w=200&q=70'
+      'image': 'https://images.pexels.com/photos/4384679/pexels-photo-4384679.jpeg?auto=compress&cs=tinysrgb&w=1000&q=80'
     },
     {
       'name': 'Push Up',
       'key': 'pushup',
-      'image': 'https://images.pexels.com/photos/4720326/pexels-photo-4720326.jpeg?auto=compress&cs=tinysrgb&w=200&q=70'
+      'image': 'https://images.pexels.com/photos/4853921/pexels-photo-4853921.jpeg?auto=compress&cs=tinysrgb&w=1000&q=80'
     },
     {
       'name': 'Bicep Curl',
       'key': 'bicep_curl',
-      'image': 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70&fit=crop'
+      'image': 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=1000&q=80&fit=crop'
     },
     {
       'name': 'Jumping Jack',
       'key': 'jumping_jack',
-      'image': 'https://images.pexels.com/photos/4853091/pexels-photo-4853091.jpeg?auto=compress&cs=tinysrgb&w=200&q=70'
+      'image': 'https://images.pexels.com/photos/4971058/pexels-photo-4971058.jpeg?auto=compress&cs=tinysrgb&w=1000&q=80'
     },
     {
       'name': 'Left Lunge',
       'key': 'lunge_left',
-      'image': 'https://images.unsplash.com/photo-1613685044678-0a9ae422cf5a?auto=format&fit=crop&w=200&q=70'
+      'image': 'https://images.unsplash.com/photo-1613685044678-0a9ae422cf5a?auto=format&fit=crop&w=1000&q=80'
     },
     {
       'name': 'Right Lunge',
       'key': 'lunge_right',
-      'image': 'https://images.pexels.com/photos/4971063/pexels-photo-4971063.jpeg?auto=compress&cs=tinysrgb&w=200&q=70'
+      'image': 'https://images.pexels.com/photos/4971063/pexels-photo-4971063.jpeg?auto=compress&cs=tinysrgb&w=1000&q=80'
     },
     {
       'name': 'Sit Up',
       'key': 'sit_up',
-      'image': 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=70'
+      'image': 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80'
     },
     {
       'name': 'Plank',
       'key': 'plank',
-      'image': 'https://images.unsplash.com/photo-1727712763476-f4e4e183ca4e?auto=format&fit=crop&w=200&q=70'
+      'image': 'https://images.unsplash.com/photo-1727712763476-f4e4e183ca4e?auto=format&fit=crop&w=1000&q=80'
     },
     {
       'name': 'Glute Bridge',
       'key': 'glute_bridge',
-      'image': 'https://images.pexels.com/photos/4534643/pexels-photo-4534643.jpeg?auto=compress&cs=tinysrgb&w=200&q=70'
+      'image': 'https://images.pexels.com/photos/4534643/pexels-photo-4534643.jpeg?auto=compress&cs=tinysrgb&w=1000&q=80'
     },
   ];
 
@@ -527,8 +527,8 @@ class _WorkoutTrackerScreenState extends State<WorkoutTrackerScreen>
                             imageUrl: exercise['image']!,
                             cacheManager: ExerciseCacheManager(),
                             fit: BoxFit.cover,
-                            memCacheWidth: 120,   // ← exact widget width
-                            memCacheHeight: 140,  // ← exact widget height
+                            memCacheWidth: 360,   // ← exact widget width
+                            memCacheHeight: 420,  // ← exact widget height
                             fadeInDuration: const Duration(milliseconds: 200),
                             placeholder: (context, url) => Container(
                               color: const Color(0xFF2A2A2A),

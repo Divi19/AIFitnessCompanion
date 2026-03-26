@@ -62,7 +62,7 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
     {
       'label': 'Endurance', 'icon': Icons.directions_run, 'desc': 'Improve stamina & cardio', 'color': const Color(0xFF4CAF50),
       // Running track / athletic image
-      'image': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800', 
+      'image': 'https://images.pexels.com/photos/5687530/pexels-photo-5687530.jpeg?auto=compress&cs=tinysrgb&w=800&q=80', 
       'subOptions': [{'label':'Running','desc':'Aerobic base'},{'label':'Cycling','desc':'Leg endurance'},{'label':'Swimming','desc':'Full-body stamina'},{'label':'General Cardio','desc':'Mixed endurance'}]
     },
     {
@@ -74,13 +74,13 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
     {
       'label': 'General Fitness','icon': Icons.favorite, 'desc': 'Overall health & wellness', 'color': const Color(0xFFFF9800),
       // Balanced gym / kettlebell image
-      'image': 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=800', 
+      'image': 'https://images.pexels.com/photos/6339358/pexels-photo-6339358.jpeg?auto=compress&cs=tinysrgb&w=300&q=80',
       'subOptions': [{'label':'Full Body','desc':'Balanced training'},{'label':'Athletic','desc':'Functional sport'},{'label':'Maintenance','desc':'Stay healthy'},{'label':'Weight Control','desc':'Manage weight'}]
     },
     {
       'label': 'Rehabilitation', 'icon': Icons.healing, 'desc': 'Recover & rebuild safely', 'color': const Color(0xFF26C6DA),
       // Gentle stretching / physical therapy image
-      'image': 'https://images.unsplash.com/photo-1576678927484-cc907957088c?auto=format&fit=crop&q=80&w=800', 
+      'image': 'https://images.pexels.com/photos/5793911/pexels-photo-5793911.jpeg?auto=compress&cs=tinysrgb&w=800&q=80', 
       'subOptions': [{'label':'Post-Surgery','desc':'Gentle recovery'},{'label':'Injury Recovery','desc':'Rebuild safely'},{'label':'Chronic Pain','desc':'Low-impact'},{'label':'Posture','desc':'Fix imbalances'}]
     },
   ];
