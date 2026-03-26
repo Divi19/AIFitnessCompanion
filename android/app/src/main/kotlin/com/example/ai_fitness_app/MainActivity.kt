@@ -26,12 +26,9 @@ class MainActivity : FlutterActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.getBooleanExtra("stop", false)) return
 
-            val repCount     = intent.getIntExtra(
-                QuickPoseActivity.EXTRA_REP_COUNT, 0)
-            val feedback     = intent.getStringExtra(
-                QuickPoseActivity.EXTRA_FEEDBACK) ?: ""
-            val status       = intent.getStringExtra(
-                QuickPoseActivity.EXTRA_STATUS) ?: "loading"
+            val repCount     = intent.getIntExtra(QuickPoseActivity.EXTRA_REP_COUNT, 0)
+            val feedback     = intent.getStringExtra(QuickPoseActivity.EXTRA_FEEDBACK) ?: ""
+            val status       = intent.getStringExtra(QuickPoseActivity.EXTRA_STATUS) ?: "loading"
             val isTimer      = intent.getBooleanExtra("isTimer", false)
             val isAtDepth    = intent.getBooleanExtra("isAtProperDepth", false)
             // audioMessage is only present on encouragement/half rep broadcasts
@@ -40,14 +37,12 @@ class MainActivity : FlutterActivity() {
 
             runOnUiThread {
                 eventSink?.success(mapOf(
-                    "repCount"      to repCount,
-                    "feedback"      to feedback,
-                    "status"        to status,
-                    "isTimer"       to isTimer,
-                    "exerciseState" to "",
-                    "fps"           to 0
+                    "repCount"        to repCount,
+                    "feedback"        to feedback,
+                    "status"          to status,
+                    "isTimer"         to isTimer,
                     "isAtProperDepth" to isAtDepth,
-                    "audioMessage"  to audioMessage,
+                    "audioMessage"    to audioMessage,
                 ))
             }
         }
@@ -62,9 +57,6 @@ class MainActivity : FlutterActivity() {
             val feedbackKeys = intent.getStringArrayExtra(QuickPoseActivity.EXTRA_SESSION_FEEDBACK_KEYS) ?: emptyArray()
             val feedbackVals = intent.getIntArrayExtra(QuickPoseActivity.EXTRA_SESSION_FEEDBACK_VALUES) ?: intArrayOf()
 
-            // ── FIX: read avgJointAngle from the broadcast ────────────────
-            // -1f is the sentinel meaning "no landmarks captured this session"
-            // We pass it through as-is; QuickPoseService.dart normalises it to null
             val rawAngle     = intent.getFloatExtra(QuickPoseActivity.EXTRA_SESSION_AVG_ANGLE, -1f)
             val avgAngle: Double? = if (rawAngle >= 0f) rawAngle.toDouble() else null
 
@@ -76,12 +68,11 @@ class MainActivity : FlutterActivity() {
 
             runOnUiThread {
                 sessionSink?.success(mapOf(
-                    "exercise"       to exercise,
-                    "reps"           to reps,
-                    "durationMs"     to durationMs,
-                    "feedbackMap"    to feedbackMap,
-                    // ── FIX: was missing entirely — this is why the widget never appeared
-                    "avgJointAngle"  to avgAngle
+                    "exercise"      to exercise,
+                    "reps"          to reps,
+                    "durationMs"    to durationMs,
+                    "feedbackMap"   to feedbackMap,
+                    "avgJointAngle" to avgAngle,
                 ))
             }
         }
