@@ -162,7 +162,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     setState(() { _scannedProduct = null; _portionFactor = 1.0; _scanLock = false; });
     await _loadTodaysLogs();
     _scannerController.start();
-    _showSnack('${_scannedProduct?['name'] ?? 'Snack'} logged! 🎉');
+    // _showSnack('${_scannedProduct?['name'] ?? 'Snack'} logged! 🎉');
   }
 
   void _resetToCamera() {
@@ -262,7 +262,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
     );
     _resetToCamera();
     await _loadTodaysLogs();
-    _showSnack('${suggestion['name']} logged! 🔥');
+    // _showSnack('${suggestion['name']} logged! 🔥');
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
