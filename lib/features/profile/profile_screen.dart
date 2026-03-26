@@ -38,7 +38,7 @@ class ProfileScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFB9FF2B)));
+            return const Center(child: CircularProgressIndicator(color: Color(0xFFC5F135)));
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -50,43 +50,90 @@ class ProfileScreen extends StatelessWidget {
           final goal      = data['fitness_goal'] ?? 'Not set';
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ── User Header ──────────────────────────────────────────
                 Center(
-                  child: CircleAvatar(
-                    radius: 40,
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    child: Text(
-                      (data['name'] ?? 'U').toString().substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFB9FF2B)),
-                    ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFC5F135), width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFC5F135).withOpacity(0.15),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
+                        ),
+                        child: const CircleAvatar(
+                          radius: 46,
+                          backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80&fit=crop'),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        data['name'] ?? 'Sarah James',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        )
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        user.email ?? 'sarah.j@fitcore.ai',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF6B6B8A),
+                          fontWeight: FontWeight.w500,
+                        )
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                Text(data['name'] ?? 'User',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                Text(user.email ?? '',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey)),
 
                 const SizedBox(height: 40),
 
-                // ── Info Cards ────────────────────────────────────────────
-                _buildInfoSection('Current Goal', goal.toString(), Icons.flag),
-                const SizedBox(height: 16),
-                _buildInfoSection('Weight', bodyStats['weight']?.toString() ?? '-', Icons.monitor_weight),
-                const SizedBox(height: 16),
-                _buildInfoSection('Height', bodyStats['height']?.toString() ?? '-', Icons.height),
+                // ── 3-Column Info Grid ───────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMiniStatCard(
+                        icon: Icons.flag,
+                        iconColor: const Color(0xFF9B8FFF),
+                        title: 'GOAL',
+                        value: goal.toString().split(' ').first, // Try to make it fit in box
+                      )
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMiniStatCard(
+                        icon: Icons.monitor_weight,
+                        iconColor: const Color(0xFFC5F135),
+                        title: 'WEIGHT',
+                        value: bodyStats['weight']?.toString() ?? '-',
+                      )
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMiniStatCard(
+                        icon: Icons.height,
+                        iconColor: const Color(0xFFFF7B6B),
+                        title: 'HEIGHT',
+                        value: bodyStats['height']?.toString() ?? '-',
+                      )
+                    ),
+                  ],
+                ),
 
                 const SizedBox(height: 32),
 
@@ -96,15 +143,16 @@ class ProfileScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(builder: (_) => const InjuryProfileScreen()),
                   ),
-                  icon: const Icon(Icons.medical_information),
+                  icon: const Icon(Icons.medical_information, color: Color(0xFF9B8FFF)),
                   label: const Text('Update Stats & Injuries',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
+                    backgroundColor: const Color(0xFF1A1A2E), // Match dark cards
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(20),
                       side: const BorderSide(color: Colors.white10),
                     ),
                   ),
@@ -112,13 +160,18 @@ class ProfileScreen extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                TextButton.icon(
+                TextButton(
                   onPressed: () => _signOut(context),
-                  icon: const Icon(Icons.logout, color: Colors.redAccent),
-                  label: const Text('Sign Out',
-                      style: TextStyle(color: Colors.redAccent, fontSize: 16)),
                   style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: const Text('Sign Out',
+                      style: TextStyle(
+                        color: Color(0xFFFF7B6B),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold
+                      )),
                 ),
               ],
             ),
@@ -128,30 +181,40 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoSection(String title, String value, IconData icon) {
+  Widget _buildMiniStatCard({required IconData icon, required Color iconColor, required String title, required String value}) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white10)
       ),
-      child: Row(children: [
-        Icon(icon, color: const Color(0xFFB9FF2B), size: 24),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 2),
-            Text(value,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
-          ]),
-        ),
-      ]),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF6B6B8A),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+            )
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            )
+          )
+        ],
+      ),
     );
   }
 }

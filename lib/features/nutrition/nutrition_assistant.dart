@@ -8,7 +8,7 @@ import '../../services/rag_service.dart';
 import '../../services/workout_session_service.dart';
 
 const Map<String, Color> _exerciseColours = {
-  'squat':        Color(0xFFFF5E00),
+  'squat':        Color(0xFF9B8FFF),
   'pushup':       Color(0xFFB9FF2B),
   'bicep_curl':   Color(0xFFFFB800),
   'jumping_jack': Color(0xFF00E5FF),
@@ -20,7 +20,7 @@ const Map<String, Color> _exerciseColours = {
 };
 
 Color _colourFor(String exercise) =>
-    _exerciseColours[exercise] ?? const Color(0xFFFF5E00);
+    _exerciseColours[exercise] ?? const Color(0xFF9B8FFF);
 
 class NutritionAssistantScreen extends StatefulWidget {
   const NutritionAssistantScreen({super.key});
@@ -489,7 +489,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
     if (pts.length < 2) return Colors.white54;
     final delta = pts.last.score - pts.first.score;
     if (delta >= 5)  return const Color(0xFFB9FF2B);
-    if (delta <= -5) return const Color(0xFFFF5E00);
+    if (delta <= -5) return const Color(0xFF9B8FFF);
     return Colors.white54;
   }
 
@@ -589,7 +589,7 @@ class _SetTrendSheetState extends State<_SetTrendSheet> {
                 height: 180,
                 child: Center(
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Color(0xFFFF5E00)),
+                      strokeWidth: 2, color: Color(0xFF9B8FFF)),
                 ),
               )
             else if (_points == null || _points!.isEmpty)
@@ -1571,21 +1571,21 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFF5E00).withOpacity(0.1),
+                        color: const Color(0xFF9B8FFF).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                            color: const Color(0xFF9B8FFF).withOpacity(0.4)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.show_chart_rounded,
-                              color: Color(0xFFFF5E00), size: 14),
+                              color: Color(0xFF9B8FFF), size: 14),
                           SizedBox(width: 5),
                           Text(
                             'Trend',
                             style: TextStyle(
-                              color: Color(0xFFFF5E00),
+                              color: Color(0xFF9B8FFF),
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                             ),
@@ -1621,13 +1621,13 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 color: const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: const Color(0xFFFF5E00)
+                                  color: const Color(0xFF9B8FFF)
                                       .withOpacity(0.5),
                                   width: 1.2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFFF5E00)
+                                    color: const Color(0xFF9B8FFF)
                                         .withOpacity(0.08),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
@@ -1641,7 +1641,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                     children: [
                                       const Icon(
                                           Icons.calendar_today_rounded,
-                                          color: Color(0xFFFF5E00),
+                                          color: Color(0xFF9B8FFF),
                                           size: 13),
                                       const SizedBox(width: 6),
                                       Expanded(
@@ -1708,13 +1708,13 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isExpanded
-                                    ? const Color(0xFFFF5E00)
+                                    ? const Color(0xFF9B8FFF)
                                         .withOpacity(0.15)
                                     : const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: isExpanded
-                                      ? const Color(0xFFFF5E00)
+                                      ? const Color(0xFF9B8FFF)
                                       : Colors.white12,
                                   width: isExpanded ? 1.5 : 1,
                                 ),
@@ -1745,7 +1745,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                   Text(
                                     'Set $setNum',
                                     style: TextStyle(
-                                      color: const Color(0xFFFF5E00)
+                                      color: const Color(0xFF9B8FFF)
                                           .withOpacity(0.85),
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
@@ -1787,7 +1787,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                       color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: const Color(0xFFFF5E00).withOpacity(0.4)),
+                          color: const Color(0xFF9B8FFF).withOpacity(0.4)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1795,13 +1795,13 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                         Row(
                           children: [
                             const Icon(Icons.record_voice_over,
-                                color: Color(0xFFFF5E00), size: 16),
+                                color: Color(0xFF9B8FFF), size: 16),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 '${widget.expandedSession!.exerciseDisplayName} Debrief',
                                 style: const TextStyle(
-                                  color: Color(0xFFFF5E00),
+                                  color: Color(0xFF9B8FFF),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1815,12 +1815,12 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: _isSpeaking
-                                      ? const Color(0xFFFF5E00)
-                                      : const Color(0xFFFF5E00)
+                                      ? const Color(0xFF9B8FFF)
+                                      : const Color(0xFF9B8FFF)
                                           .withOpacity(0.15),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: const Color(0xFFFF5E00)
+                                    color: const Color(0xFF9B8FFF)
                                         .withOpacity(0.6),
                                   ),
                                 ),
@@ -1830,7 +1830,7 @@ class _SessionHistoryStripState extends State<_SessionHistoryStrip> {
                                       : Icons.play_arrow_rounded,
                                   color: _isSpeaking
                                       ? Colors.white
-                                      : const Color(0xFFFF5E00),
+                                      : const Color(0xFF9B8FFF),
                                   size: 20,
                                 ),
                               ),
@@ -1963,13 +1963,13 @@ class _ChatBubble extends StatelessWidget {
           border: isUser
               ? null
               : Border.all(
-                  color: const Color(0xFFFF5E00).withOpacity(0.75),
+                  color: const Color(0xFF9B8FFF).withOpacity(0.75),
                   width: 1.2),
           boxShadow: isUser
               ? null
               : [
                   BoxShadow(
-                    color: const Color(0xFFFF5E00).withOpacity(0.12),
+                    color: const Color(0xFF9B8FFF).withOpacity(0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -1993,7 +1993,7 @@ class _ChatBubble extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       height: 2),
                   h2: const TextStyle(
-                      color: Color(0xFFFF5E00),
+                      color: Color(0xFF9B8FFF),
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 2),
@@ -2008,7 +2008,7 @@ class _ChatBubble extends StatelessWidget {
                       color: Colors.white70,
                       fontStyle: FontStyle.italic),
                   listBullet: const TextStyle(
-                      color: Color(0xFFFF5E00), fontSize: 15),
+                      color: Color(0xFF9B8FFF), fontSize: 15),
                 ),
               ),
       ),
@@ -2045,12 +2045,12 @@ class _CardDeckState extends State<_CardDeck> {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           onPressed: _resetCards,
-          icon: const Icon(Icons.refresh, color: Color(0xFFFF5E00)),
+          icon: const Icon(Icons.refresh, color: Color(0xFF9B8FFF)),
           label: const Text('Review Cards Again',
               style: TextStyle(
-                  color: Color(0xFFFF5E00), fontWeight: FontWeight.bold)),
+                  color: Color(0xFF9B8FFF), fontWeight: FontWeight.bold)),
           style: TextButton.styleFrom(
-            backgroundColor: const Color(0xFFFF5E00).withOpacity(0.1),
+            backgroundColor: const Color(0xFF9B8FFF).withOpacity(0.1),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
@@ -2107,10 +2107,10 @@ class _CardDeckState extends State<_CardDeck> {
           colors: [Color(0xFF2E1200), Color(0xFF110500)],
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFFF5E00), width: 2),
+        border: Border.all(color: const Color(0xFF9B8FFF), width: 2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF5E00).withOpacity(0.25),
+            color: const Color(0xFF9B8FFF).withOpacity(0.25),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -2128,7 +2128,7 @@ class _CardDeckState extends State<_CardDeck> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF5E00),
+                    color: const Color(0xFF9B8FFF),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -2141,7 +2141,7 @@ class _CardDeckState extends State<_CardDeck> {
                   ),
                 ),
               const Icon(Icons.local_fire_department,
-                  color: Color(0xFFFF5E00), size: 28),
+                  color: Color(0xFF9B8FFF), size: 28),
             ],
           ),
           const SizedBox(height: 20),
@@ -2212,7 +2212,7 @@ class _CardGenerationPlaceholder extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-              color: const Color(0xFFFF5E00).withOpacity(0.5), width: 1.5),
+              color: const Color(0xFF9B8FFF).withOpacity(0.5), width: 1.5),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -2221,7 +2221,7 @@ class _CardGenerationPlaceholder extends StatelessWidget {
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Color(0xFFFF5E00)),
+                  strokeWidth: 2, color: Color(0xFF9B8FFF)),
             ),
             SizedBox(width: 16),
             Text('Designing custom deck...',
@@ -2255,7 +2255,7 @@ class _TypingIndicator extends StatelessWidget {
             bottomRight: Radius.circular(16),
           ),
           border: Border.all(
-              color: const Color(0xFFFF5E00).withOpacity(0.75), width: 1.2),
+              color: const Color(0xFF9B8FFF).withOpacity(0.75), width: 1.2),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -2264,7 +2264,7 @@ class _TypingIndicator extends StatelessWidget {
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Color(0xFFFF5E00)),
+                  strokeWidth: 2, color: Color(0xFF9B8FFF)),
             ),
             SizedBox(width: 12),
             Text('Searching knowledge base...',

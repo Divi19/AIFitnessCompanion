@@ -24,34 +24,65 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
   bool _isLoading   = false;
 
   late final AnimationController _fadeController = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 350));
+      vsync: this, duration: const Duration(milliseconds: 350));
   late final Animation<double> _fadeAnim = CurvedAnimation(
-    parent: _fadeController, curve: Curves.easeInOut);
+      parent: _fadeController, curve: Curves.easeInOut);
 
-  // ── THEME ──────────────────────────────────────────────────────────────────
-  static const _orange  = Color(0xFFFF5E00);
-  static const _volt    = Color(0xFFB9FF2B);
-  static const _bg      = Color(0xFF0D0D0D);
-  static const _surface = Color(0xFF1A1A1A);
+  // ── THEME (Updated to Lime Accent) ───────────────────────────────────────────
+  static const _accentLime = Color(0xFFC5F135);
+  static const _darkTextOnAccent = Color(0xFF2D4A00); // Dark green for text on lime background
+  static const _bg      = Color(0xFF0D0D0D); // Pure Black
+  static const _surface = Color(0xFF1A1A2E); // Slightly Lighter Dark Surface
+  static const _surfaceLight = Color(0xFF25253D);
 
-  // ── STEP 1: Goal ──────────────────────────────────────────────────────────
+  // ── Placeholder Image Logic ──────────────────────────────────────────────
+  // The specific pixel art image provided by the user. 
+  // Map this image string to your asset path in Firebase later.
+  // Make sure you save image_a4ab04.png into assets/images/ in your project.
+  static const _defaultPixelArtImage = 'assets/images/image_a4ab04.png'; 
+
+  // ── STEP 1: Goal (Updated with unique web images for each category) ───────
   String _selectedGoal    = 'Weight Loss';
   String _selectedSubGoal = '';
   int    _planWeeks       = 4;
 
   final List<Map<String, dynamic>> _goals = [
-    {'label': 'Weight Loss',    'icon': Icons.trending_down,    'desc': 'Burn fat & slim down',          'color': const Color(0xFFFF6B6B),
-     'subOptions': [{'label':'Fat Burn','desc':'Cardio-heavy, high rep'},{'label':'Toning','desc':'Lean muscle & low fat'},{'label':'HIIT Focus','desc':'Max calorie burn'},{'label':'Steady Cardio','desc':'Sustainable fat loss'}]},
-    {'label': 'Muscle Gain',    'icon': Icons.fitness_center,   'desc': 'Build size & strength',         'color': const Color(0xFF4F8EF7),
-     'subOptions': [{'label':'Hypertrophy','desc':'Volume for size'},{'label':'Strength','desc':'Heavy compounds'},{'label':'Power','desc':'Explosive movements'},{'label':'Lean Bulk','desc':'Muscle with minimal fat'}]},
-    {'label': 'Endurance',      'icon': Icons.directions_run,   'desc': 'Improve stamina & cardio',      'color': const Color(0xFF4CAF50),
-     'subOptions': [{'label':'Running','desc':'Aerobic base'},{'label':'Cycling','desc':'Leg endurance'},{'label':'Swimming','desc':'Full-body stamina'},{'label':'General Cardio','desc':'Mixed endurance'}]},
-    {'label': 'Flexibility',    'icon': Icons.self_improvement, 'desc': 'Mobility & stretching',         'color': const Color(0xFFAB47BC),
-     'subOptions': [{'label':'Yoga','desc':'Flow & mindfulness'},{'label':'Stretching','desc':'Range of motion'},{'label':'Mobility','desc':'Joint health'},{'label':'Pilates','desc':'Core control'}]},
-    {'label': 'General Fitness','icon': Icons.favorite,         'desc': 'Overall health & wellness',     'color': const Color(0xFFFF9800),
-     'subOptions': [{'label':'Full Body','desc':'Balanced training'},{'label':'Athletic','desc':'Functional sport'},{'label':'Maintenance','desc':'Stay healthy'},{'label':'Weight Control','desc':'Manage weight'}]},
-    {'label': 'Rehabilitation', 'icon': Icons.healing,          'desc': 'Recover & rebuild safely',      'color': const Color(0xFF26C6DA),
-     'subOptions': [{'label':'Post-Surgery','desc':'Gentle recovery'},{'label':'Injury Recovery','desc':'Rebuild safely'},{'label':'Chronic Pain','desc':'Low-impact'},{'label':'Posture','desc':'Fix imbalances'}]},
+    {
+      'label': 'Weight Loss', 'icon': Icons.trending_down, 'desc': 'Burn fat & slim down', 'color': const Color(0xFFFF6B6B),
+      // Intense cardio / running image
+      'image': 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Fat Burn','desc':'Cardio-heavy, high rep'},{'label':'Toning','desc':'Lean muscle & low fat'},{'label':'HIIT Focus','desc':'Max calorie burn'},{'label':'Steady Cardio','desc':'Sustainable fat loss'}]
+    },
+    {
+      'label': 'Muscle Gain', 'icon': Icons.fitness_center, 'desc': 'Build size & strength', 'color': const Color(0xFF4F8EF7),
+      // Heavy lifting / bicep image
+      'image': 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Hypertrophy','desc':'Volume for size'},{'label':'Strength','desc':'Heavy compounds'},{'label':'Power','desc':'Explosive movements'},{'label':'Lean Bulk','desc':'Muscle with minimal fat'}]
+    },
+    {
+      'label': 'Endurance', 'icon': Icons.directions_run, 'desc': 'Improve stamina & cardio', 'color': const Color(0xFF4CAF50),
+      // Running track / athletic image
+      'image': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Running','desc':'Aerobic base'},{'label':'Cycling','desc':'Leg endurance'},{'label':'Swimming','desc':'Full-body stamina'},{'label':'General Cardio','desc':'Mixed endurance'}]
+    },
+    {
+      'label': 'Flexibility', 'icon': Icons.self_improvement, 'desc': 'Mobility & stretching', 'color': const Color(0xFFAB47BC),
+      // Yoga pose / stretching image
+      'image': 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Yoga','desc':'Flow & mindfulness'},{'label':'Stretching','desc':'Range of motion'},{'label':'Mobility','desc':'Joint health'},{'label':'Pilates','desc':'Core control'}]
+    },
+    {
+      'label': 'General Fitness','icon': Icons.favorite, 'desc': 'Overall health & wellness', 'color': const Color(0xFFFF9800),
+      // Balanced gym / kettlebell image
+      'image': 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Full Body','desc':'Balanced training'},{'label':'Athletic','desc':'Functional sport'},{'label':'Maintenance','desc':'Stay healthy'},{'label':'Weight Control','desc':'Manage weight'}]
+    },
+    {
+      'label': 'Rehabilitation', 'icon': Icons.healing, 'desc': 'Recover & rebuild safely', 'color': const Color(0xFF26C6DA),
+      // Gentle stretching / physical therapy image
+      'image': 'https://images.unsplash.com/photo-1576678927484-cc907957088c?auto=format&fit=crop&q=80&w=800', 
+      'subOptions': [{'label':'Post-Surgery','desc':'Gentle recovery'},{'label':'Injury Recovery','desc':'Rebuild safely'},{'label':'Chronic Pain','desc':'Low-impact'},{'label':'Posture','desc':'Fix imbalances'}]
+    },
   ];
 
   final _customGoalController = TextEditingController();
@@ -130,11 +161,12 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
           ? _customGoalController.text.trim()
           : '$_selectedGoal – $_selectedSubGoal';
 
-      // Save updated preferences
+      // ── SAVE Updated Preferences + Active Plan Image URL ──────────────────────
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'fitness_goal': goal,
         'goal_focus':   _selectedSubGoal,
         'plan_weeks':   _planWeeks,
+        'active_plan_image': _currentGoalData['image'], // <--- SAVE IMAGE URL TO PROFILE
         'workout_preferences': {
           'days_per_week':        _daysPerWeek,
           'duration_per_session': _workoutDuration,
@@ -157,72 +189,36 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen>
       final bmi             = insights['bmi'] ?? 'Unknown';
 
       // ── EXERCISE LIBRARY ────────────────────────────────────────────────────
-      // These are the ONLY trackable exercises available in the Pose Tracker.
-      // The prompt MUST restrict no-equipment plans to this list + simple extras.
-      // With-equipment plans can expand beyond this list.
       const trackableExercises = '''
 TRACKABLE EXERCISES (available in the app's Pose Tracker — prefer these):
-  • Squat            — lower body, glutes, quads
-  • Push Up          — chest, triceps, shoulders
-  • Bicep Curl       — biceps (bodyweight variation: use water bottles or own resistance)
-  • Jumping Jack     — cardio, full body warm-up
-  • Right Lunge      — right leg, glutes, balance
-  • Left Lunge       — left leg, glutes, balance
-  • Sit Up           — core, abs
-  • Plank            — core, stability, full body
-  • Glute Bridge     — glutes, hamstrings, lower back
+  • Squat 
+  • Push Up
+  • Bicep Curl
+  • Jumping Jack
+  • Right Lunge
+  • Left Lunge
+  • Sit Up
+  • Plank
+  • Glute Bridge
 
-ALLOWED SIMPLE EXTRAS (not tracked by pose, but valid for all goals):
-  • Walk / Brisk Walk   — cardio, endurance
-  • Jog in Place        — cardio
-  • High Knees          — cardio, hip flexors
-  • Mountain Climbers   — cardio, core
-  • Burpee              — full body, cardio
-  • Yoga Flow           — flexibility, mindfulness
-  • Static Stretch      — flexibility, cool-down
-  • Hip Flexor Stretch  — flexibility, mobility
-  • Child's Pose        — flexibility, recovery
-  • Cat-Cow Stretch     — spine mobility
-  • Shoulder Rolls      — upper body mobility
-  • Calf Raise          — calves, ankles
-  • Wall Sit            — quads, endurance
-  • Superman Hold       — lower back, glutes
-  • Dead Bug            — core, stability
-  • Bird Dog            — core, balance
+ALLOWED SIMPLE EXTRAS:
+  • Walk / Brisk Walk
+  • Jog in Place
+  • High Knees
+  • Mountain Climbers
+  • Burpee
+  • Yoga Flow
+  • Static Stretch
 ''';
 
-      // Goal-to-exercise guidance so Gemini picks the RIGHT exercises per goal
       const goalExerciseGuide = '''
 GOAL → RECOMMENDED EXERCISE FOCUS:
-  Weight Loss / Fat Burn:
-    → High cardio: Jumping Jack, Burpee, High Knees, Mountain Climbers, Jog in Place
-    → Compound: Squat, Push Up, Lunge (both sides)
-    → Core finisher: Plank, Sit Up
-
-  Muscle Gain / Hypertrophy:
-    → Compound strength: Squat, Push Up, Glute Bridge, Lunge (both sides)
-    → Isolation: Bicep Curl, Sit Up
-    → Volume: high sets (4-5 × 10-15 reps), progressive overload each week
-
-  Endurance / Cardio:
-    → Sustained cardio: Jumping Jack, High Knees, Jog in Place, Burpee, Walk
-    → Circuit style: short rest, back-to-back exercises
-    → Core stability: Plank, Mountain Climbers
-
-  Flexibility / Mobility:
-    → Yoga Flow, Static Stretch, Hip Flexor Stretch, Child's Pose, Cat-Cow
-    → Mobility holds: 30–60 sec each
-    → Gentle movement: Shoulder Rolls, Calf Raise, Superman Hold
-
-  General Fitness / Full Body:
-    → Mix all categories: Squat, Push Up, Jumping Jack, Plank, Sit Up, Glute Bridge
-    → Balance: include cardio + strength + core each session
-
-  Rehabilitation / Recovery:
-    → Low-impact ONLY: Glute Bridge, Bird Dog, Dead Bug, Superman Hold, Cat-Cow
-    → Stretch priority: Hip Flexor Stretch, Child's Pose, Static Stretch
-    → SKIP: Burpee, High Knees, Jumping Jack (high impact)
-    → Very low sets: 2-3 × 8-10 reps, focus on form
+  Weight Loss: Jumping Jack, Burpee, High Knees, Squat, Push Up, Lunge
+  Muscle Gain: Squat, Push Up, Glute Bridge, Bicep Curl (high reps/sets)
+  Endurance: Jumping Jack, High Knees, Jog in Place, Plank
+  Flexibility: Yoga Flow, Static Stretch
+  General Fitness: Mix all categories
+  Rehabilitation: Low-impact ONLY (Glute Bridge, Plank, Static Stretch) — SKIP Burpee, Jumping Jack
 ''';
 
       final prompt = '''
@@ -230,39 +226,22 @@ You are an expert physiotherapist and certified personal trainer.
 Generate a complete $_planWeeks-week workout program for this user.
 
 User Profile:
-- Age: ${stats['age'] ?? 'Unknown'} years old
-- Gender: ${stats['gender'] ?? 'Unknown'}
-- Weight: ${stats['weight'] ?? 'Unknown'}
-- Target Weight: ${stats['target_weight'] ?? 'Maintain current weight'}
-- Height: ${stats['height'] ?? 'Unknown'}
-- BMI: $bmi
-- Daily Calorie Target: $calories kcal
+- Age: ${stats['age'] ?? 'Unknown'}
+- Primary Goal: $goal
 - Fitness Level: $_fitnessLevel
-- Primary Goal: $_selectedGoal
-- Specific Focus: $_selectedSubGoal
 - Workout Days Per Week: $_daysPerWeek days
-- Session Duration: $_workoutDuration per session
-- Plan Duration: $_planWeeks weeks ($totalDays total sessions)
+- Session Duration: $_workoutDuration
+- Plan Duration: $_planWeeks weeks ($totalDays sessions)
 - Physical Limitations / Injuries: $limitationsText
-- Uses Wheelchair: $usesWheelchair
-- Uses Prosthesis: $usesProsthesis
-- Equipment Available: ${_hasWeights ? 'Has weights/gym equipment — you MAY include dumbbell, barbell, cable, machine exercises in addition to the list below' : 'NO equipment — restrict to the exercise list below ONLY'}
+- Equipment Available: ${_hasWeights ? 'Has weights' : 'NO equipment — restrict to bodyweight list below ONLY'}
 
 $trackableExercises
 
 $goalExerciseGuide
 
-STRICT RULES — follow every single one:
-1. NEVER include exercises that stress injured body parts from the limitations list
-2. Adapt ALL movements for the user's fitness level
-3. Each session must fit within $_workoutDuration
-4. ${_hasWeights ? 'You may use gym/dumbbell exercises in addition to the trackable list' : 'Use ONLY exercises from the TRACKABLE EXERCISES and ALLOWED SIMPLE EXTRAS lists above — no other exercises'}
-5. Use the Goal → Exercise Focus guide to pick the RIGHT exercises for this user's goal
-6. Each week must have exactly $_daysPerWeek workout days plus rest days to fill 7 days
-7. Add progressive overload each week (increase reps, sets, or reduce rest)
-8. Keep exercise names EXACTLY matching the list above (e.g. "Right Lunge" not "Lunge" or "Forward Lunge")
-9. Keep detail concise: "3 sets × 12 reps" or "3 sets × 30 sec" format only
-10. Output ONLY a raw JSON array — no markdown, no backticks, no text before or after
+STRICT RULES:
+1. NEVER include exercises that stress injured body parts.
+2. Output ONLY a raw JSON array — no markdown, no backticks.
 
 JSON structure EXACTLY as follows:
 [
@@ -275,9 +254,7 @@ JSON structure EXACTLY as follows:
         "isRest": false,
         "exercises": [
           {"name": "Jumping Jack", "detail": "3 sets × 30 sec"},
-          {"name": "Squat", "detail": "3 sets × 15 reps"},
-          {"name": "Push Up", "detail": "3 sets × 10 reps"},
-          {"name": "Plank", "detail": "3 sets × 30 sec"}
+          {"name": "Squat", "detail": "3 sets × 15 reps"}
         ]
       },
       {
@@ -306,6 +283,7 @@ JSON structure EXACTLY as follows:
             .add({
           'plan':         plan,
           'goal':         goal,
+          'imageUrl':     _currentGoalData['image'], // <--- SAVE IMAGE URL TO WORKOUT PLAN DOCUMENT
           'fitnessLevel': _fitnessLevel,
           'daysPerWeek':  _daysPerWeek,
           'planWeeks':    _planWeeks,
@@ -376,14 +354,16 @@ JSON structure EXACTLY as follows:
               duration: const Duration(milliseconds: 300),
               height: 3,
               decoration: BoxDecoration(
-                color: isDone || isActive ? _orange : Colors.white12,
+                // Colors Updated to Lime Accent
+                color: isDone || isActive ? _accentLime : Colors.white12,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 5),
             Text(_stepLabels[i], style: TextStyle(
               fontSize: 10,
-              color: isActive ? _orange : isDone ? Colors.white54 : Colors.white24,
+              // Colors Updated to Lime Accent
+              color: isActive ? _accentLime : isDone ? Colors.white54 : Colors.white24,
               fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
             )),
           ]),
@@ -395,7 +375,8 @@ JSON structure EXACTLY as follows:
   Widget _buildStep1Goal() {
     final goalData    = _currentGoalData;
     final subOptions  = (goalData['subOptions'] as List).cast<Map<String, dynamic>>();
-    final accentColor = goalData['color'] as Color;
+    // Toned down the specific colors so they don't clash with the Lime theme
+    final originalAccentColor = goalData['color'] as Color;
 
     return FadeTransition(
       opacity: _fadeAnim,
@@ -422,15 +403,17 @@ JSON structure EXACTLY as follows:
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: sel ? color.withOpacity(0.18) : _surface,
+                    // Colors Updated to Lime Accent for selected state
+                    color: sel ? _accentLime.withOpacity(0.18) : _surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: sel ? color : Colors.white12, width: sel ? 2 : 1),
+                    border: Border.all(color: sel ? _accentLime : Colors.white12, width: sel ? 2 : 1),
                   ),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Icon(g['icon'] as IconData, color: sel ? color : Colors.white38, size: 22),
+                    // Icon color is now Lime when selected, subtle tint otherwise
+                    Icon(g['icon'] as IconData, color: sel ? _accentLime : color.withOpacity(0.5), size: 22),
                     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(g['label'] as String, style: TextStyle(color: sel ? Colors.white : Colors.white70, fontWeight: FontWeight.w700, fontSize: 12)),
-                      Text(g['desc'] as String, style: TextStyle(color: sel ? color.withOpacity(0.8) : Colors.white38, fontSize: 10)),
+                      Text(g['desc'] as String, style: TextStyle(color: sel ? _accentLime.withOpacity(0.8) : Colors.white38, fontSize: 10)),
                     ]),
                   ]),
                 ),
@@ -440,20 +423,21 @@ JSON structure EXACTLY as follows:
 
           const SizedBox(height: 16),
 
-          // Sub-options panel
+          // Sub-options panel (Unified to Lime Accent theme)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.07),
+              color: _accentLime.withOpacity(0.07),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: accentColor.withOpacity(0.3)),
+              border: Border.all(color: _accentLime.withOpacity(0.3)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(goalData['icon'] as IconData, color: accentColor, size: 16),
+                // Icon uses original accent, text uses Lime
+                Icon(goalData['icon'] as IconData, color: originalAccentColor.withOpacity(0.7), size: 16),
                 const SizedBox(width: 8),
                 Text('$_selectedGoal — Choose your focus',
-                    style: TextStyle(color: accentColor, fontWeight: FontWeight.w700, fontSize: 13)),
+                    style: const TextStyle(color: _accentLime, fontWeight: FontWeight.w700, fontSize: 13)),
               ]),
               const SizedBox(height: 12),
               ...subOptions.map((sub) {
@@ -465,9 +449,10 @@ JSON structure EXACTLY as follows:
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                     decoration: BoxDecoration(
-                      color: sel ? accentColor.withOpacity(0.2) : const Color(0xFF111111),
+                      // Colors Updated to Lime Accent for selected state
+                      color: sel ? _accentLime.withOpacity(0.2) : const Color(0xFF111111),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: sel ? accentColor : Colors.white12, width: sel ? 1.5 : 1),
+                      border: Border.all(color: sel ? _accentLime : Colors.white12, width: sel ? 1.5 : 1),
                     ),
                     child: Row(children: [
                       AnimatedContainer(
@@ -475,15 +460,16 @@ JSON structure EXACTLY as follows:
                         width: 18, height: 18,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: sel ? accentColor : Colors.transparent,
-                          border: Border.all(color: sel ? accentColor : Colors.white30, width: 2),
+                          color: sel ? _accentLime : Colors.transparent,
+                          border: Border.all(color: sel ? _accentLime : Colors.white30, width: 2),
                         ),
-                        child: sel ? const Icon(Icons.check, size: 11, color: Colors.white) : null,
+                        // Check icon uses Dark text color on Lime background
+                        child: sel ? const Icon(Icons.check, size: 11, color: _darkTextOnAccent) : null,
                       ),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(sub['label'] as String, style: TextStyle(color: sel ? Colors.white : Colors.white70, fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
-                        Text(sub['desc'] as String, style: TextStyle(color: sel ? accentColor.withOpacity(0.8) : Colors.white38, fontSize: 11)),
+                        Text(sub['desc'] as String, style: TextStyle(color: sel ? _accentLime.withOpacity(0.8) : Colors.white38, fontSize: 11)),
                       ])),
                     ]),
                   ),
@@ -509,21 +495,22 @@ JSON structure EXACTLY as follows:
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  color: sel ? _orange : _surface,
+                  // Colors Updated to Lime Accent for selected state
+                  color: sel ? _accentLime : _surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: sel ? _orange : Colors.white12),
+                  border: Border.all(color: sel ? _accentLime : Colors.white12),
                 ),
                 child: Column(children: [
-                  Text('$weeks', style: TextStyle(color: sel ? Colors.white : Colors.white54, fontWeight: FontWeight.w800, fontSize: 18)),
-                  Text(weeks == 1 ? 'week' : 'weeks', style: TextStyle(color: sel ? Colors.white70 : Colors.white24, fontSize: 10)),
+                  Text('$weeks', style: TextStyle(color: sel ? _darkTextOnAccent : Colors.white54, fontWeight: FontWeight.w800, fontSize: 18)),
+                  Text(weeks == 1 ? 'week' : 'weeks', style: TextStyle(color: sel ? _darkTextOnAccent.withOpacity(0.8) : Colors.white24, fontSize: 10)),
                 ]),
               ),
             ));
           }).toList()),
           const SizedBox(height: 8),
-          Center(child: Text(
-            '$_planWeeks-week plan · ${_daysPerWeek * _planWeeks} total sessions',
-            style: const TextStyle(color: _orange, fontSize: 12, fontWeight: FontWeight.w600),
+          const Center(child: Text(
+            'We recommend 4 weeks for noticeable change',
+            style: TextStyle(color: _accentLime, fontSize: 12, fontWeight: FontWeight.w600),
           )),
 
           const SizedBox(height: 20),
@@ -558,18 +545,19 @@ JSON structure EXACTLY as follows:
                   duration: const Duration(milliseconds: 200),
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                    color: sel ? _orange : _surface,
+                    // Colors Updated to Lime Accent for selected state
+                    color: sel ? _accentLime : _surface,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: sel ? _orange : Colors.white12),
+                    border: Border.all(color: sel ? _accentLime : Colors.white12),
                   ),
-                  child: Center(child: Text('$day', style: TextStyle(color: sel ? Colors.white : Colors.white54, fontWeight: FontWeight.w700, fontSize: 16))),
+                  child: Center(child: Text('$day', style: TextStyle(color: sel ? _darkTextOnAccent : Colors.white54, fontWeight: FontWeight.w700, fontSize: 16))),
                 ),
               );
             }),
           ),
           const SizedBox(height: 8),
-          Center(child: Text('$_daysPerWeek ${_daysPerWeek == 1 ? 'day' : 'days'}/week · ${_daysPerWeek * _planWeeks} total sessions',
-              style: const TextStyle(color: _orange, fontSize: 13, fontWeight: FontWeight.w600))),
+          const Center(child: Text('More days usually means shorter sessions',
+              style: TextStyle(color: _accentLime, fontSize: 13, fontWeight: FontWeight.w600))),
           const SizedBox(height: 28),
           _label('Session Duration'),
           const SizedBox(height: 12),
@@ -581,11 +569,12 @@ JSON structure EXACTLY as follows:
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 decoration: BoxDecoration(
-                  color: sel ? _orange : _surface,
+                  // Colors Updated to Lime Accent for selected state
+                  color: sel ? _accentLime : _surface,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: sel ? _orange : Colors.white12),
+                  border: Border.all(color: sel ? _accentLime : Colors.white12),
                 ),
-                child: Text(d, style: TextStyle(color: sel ? Colors.white : Colors.white54, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
+                child: Text(d, style: TextStyle(color: sel ? _darkTextOnAccent : Colors.white54, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
               ),
             );
           }).toList()),
@@ -594,8 +583,9 @@ JSON structure EXACTLY as follows:
           const SizedBox(height: 12),
           Row(children: _levels.map((level) {
             final sel = _fitnessLevel == level;
-            final c   = level == 'Beginner' ? _volt : level == 'Intermediate' ? _orange : const Color(0xFFFF3B30);
-            final tc  = sel ? (level == 'Beginner' ? Colors.black : Colors.white) : Colors.white54;
+            // Kept semantic level colors, but unified selection background to Lime
+            final levelPrimaryColor = level == 'Beginner' ? _accentLime : level == 'Intermediate' ? const Color(0xFFFF5E00) : const Color(0xFFFF3B30);
+            
             return Expanded(child: GestureDetector(
               onTap: () => setState(() => _fitnessLevel = level),
               child: AnimatedContainer(
@@ -603,12 +593,15 @@ JSON structure EXACTLY as follows:
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  color: sel ? c : _surface,
+                  // Background is Lime when selected, surface otherwise
+                  color: sel ? _accentLime : _surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: sel ? c : Colors.white12, width: sel ? 2 : 1),
+                  // Border uses the level specific color when selected
+                  border: Border.all(color: sel ? levelPrimaryColor : Colors.white12, width: sel ? 2 : 1),
                 ),
                 child: Text(level, textAlign: TextAlign.center,
-                    style: TextStyle(color: tc, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
+                    // Text color flips to dark on lime background
+                    style: TextStyle(color: sel ? _darkTextOnAccent : Colors.white54, fontWeight: sel ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
               ),
             ));
           }).toList()),
@@ -626,19 +619,20 @@ JSON structure EXACTLY as follows:
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: !_hasWeights ? _orange : _surface,
+                    // Colors Updated to Lime Accent for selected state
+                    color: !_hasWeights ? _accentLime : _surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: !_hasWeights ? _orange : Colors.white12),
+                    border: Border.all(color: !_hasWeights ? _accentLime : Colors.white12),
                   ),
                   child: Column(children: [
                     Icon(Icons.person_outline,
-                        color: !_hasWeights ? Colors.white : Colors.white38, size: 22),
+                        color: !_hasWeights ? _darkTextOnAccent : Colors.white38, size: 22),
                     const SizedBox(height: 6),
                     Text('No Equipment',
-                        style: TextStyle(color: !_hasWeights ? Colors.white : Colors.white54,
+                        style: TextStyle(color: !_hasWeights ? _darkTextOnAccent : Colors.white54,
                             fontWeight: !_hasWeights ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
                     Text('Bodyweight only',
-                        style: TextStyle(color: !_hasWeights ? Colors.white70 : Colors.white24, fontSize: 10)),
+                        style: TextStyle(color: !_hasWeights ? _darkTextOnAccent.withOpacity(0.8) : Colors.white24, fontSize: 10)),
                   ]),
                 ),
               ),
@@ -651,19 +645,20 @@ JSON structure EXACTLY as follows:
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: _hasWeights ? _orange : _surface,
+                    // Colors Updated to Lime Accent for selected state
+                    color: _hasWeights ? _accentLime : _surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _hasWeights ? _orange : Colors.white12),
+                    border: Border.all(color: _hasWeights ? _accentLime : Colors.white12),
                   ),
                   child: Column(children: [
                     Icon(Icons.fitness_center,
-                        color: _hasWeights ? Colors.white : Colors.white38, size: 22),
+                        color: _hasWeights ? _darkTextOnAccent : Colors.white38, size: 22),
                     const SizedBox(height: 6),
                     Text('Has Weights',
-                        style: TextStyle(color: _hasWeights ? Colors.white : Colors.white54,
+                        style: TextStyle(color: _hasWeights ? _darkTextOnAccent : Colors.white54,
                             fontWeight: _hasWeights ? FontWeight.w700 : FontWeight.w400, fontSize: 13)),
                     Text('Gym / home weights',
-                        style: TextStyle(color: _hasWeights ? Colors.white70 : Colors.white24, fontSize: 10)),
+                        style: TextStyle(color: _hasWeights ? _darkTextOnAccent.withOpacity(0.8) : Colors.white24, fontSize: 10)),
                   ]),
                 ),
               ),
@@ -675,60 +670,67 @@ JSON structure EXACTLY as follows:
     );
   }
 
-  // >>> THIS IS THE METHOD THAT WAS MISSING ITS SIGNATURE <<<
+  // ── Bottom Navigation Button (Updated Colors) ──────────────────────────────
   Widget _buildBottomButton() {
-    final isLast = _currentStep == 1;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      decoration: BoxDecoration(color: _bg, border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06)))),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      color: _bg, // Keeps background clean
       child: SizedBox(
-        width: double.infinity, height: 54,
+        height: 56,
+        width: double.infinity,
         child: ElevatedButton(
           onPressed: _isLoading ? null : _nextStep,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _orange, disabledBackgroundColor: Colors.white12,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 0),
+            // Updated Colors: Lime Background, Dark Text
+            backgroundColor: _accentLime,
+            foregroundColor: _darkTextOnAccent,
+            disabledBackgroundColor: Colors.white10,
+            disabledForegroundColor: Colors.white30,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
+          ),
           child: _isLoading
-              ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-              : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(isLast ? 'Generate My Plan 🚀' : 'Continue',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
-                  if (!isLast) ...[const SizedBox(width: 8), const Icon(Icons.arrow_forward, color: Colors.white, size: 18)],
-                ]),
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _darkTextOnAccent))
+              : Text(_currentStep < 1 ? 'Next Step' : 'Generate My Plan',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
         ),
       ),
     );
   }
 
+  // ── Helper UI Widgets ────────────────────────────────────────────────────────
   Widget _stepHeader(String title, String subtitle, IconData icon) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: _orange.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: _orange, size: 24),
-      ),
-      const SizedBox(height: 12),
-      Text(title, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-      const SizedBox(height: 4),
-      Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-    ]);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(16)),
+      child: Row(children: [
+        // Updated colors
+        Container(width: 40, height: 40, decoration: BoxDecoration(color: _accentLime.withOpacity(0.15), shape: BoxShape.circle), child: Icon(icon, color: _accentLime, size: 20)),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+          Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        ])),
+      ]),
+    );
   }
 
-  Widget _label(String text) => Text(text,
-      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3));
+  Widget _label(String text) {
+    return Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700));
+  }
 
-  Widget _field({required TextEditingController controller, required String hint, String? suffix, TextInputType keyboard = TextInputType.text, int maxLines = 1}) {
+  Widget _field({required TextEditingController controller, required String hint, int maxLines = 1}) {
     return TextField(
-      controller: controller, keyboardType: keyboard, maxLines: maxLines,
-      style: const TextStyle(color: Colors.white, fontSize: 15),
+      controller: controller,
+      maxLines: maxLines,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
       decoration: InputDecoration(
-        hintText: hint, hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
-        suffixText: suffix, suffixStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-        filled: true, fillColor: _surface,
-        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _orange, width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+        filled: true,
+        fillColor: _surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.all(14),
       ),
     );
   }

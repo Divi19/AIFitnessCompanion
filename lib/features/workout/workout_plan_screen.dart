@@ -22,10 +22,12 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static const _orange  = Color(0xFFFF5E00);
-  static const _volt    = Color(0xFFB9FF2B);
-  static const _bg      = Color(0xFF0D0D0D);
-  static const _surface = Color(0xFF1A1A1A);
+  // FitSense Theme Colors
+  static const _lime   = Color(0xFFC5F135);
+  static const _purple = Color(0xFF9B8FFF);
+  static const _coral  = Color(0xFFFF7B6B);
+  static const _bg     = Color(0xFF0D0D0D);
+  static const _surface = Color(0xFF1A1A2E);
 
   List<Map<String, dynamic>> _weeks = [];
   bool _planParsed = false;
@@ -196,19 +198,19 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('My Workout Plan',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white54, size: 22),
+            icon: const Icon(Icons.close, color: Colors.white54, size: 24),
             onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: _orange,
-          indicatorWeight: 2,
-          labelColor: _orange,
+          indicatorColor: _lime,
+          indicatorWeight: 2.5,
+          labelColor: _lime,
           unselectedLabelColor: Colors.white38,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           tabs: const [Tab(text: 'My Plan'), Tab(text: 'Previous Workouts')],
@@ -223,7 +225,7 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
 
   // ── INTERACTIVE PLAN ───────────────────────────────────────────────────────
   Widget _buildInteractivePlan() {
-    if (!_planParsed) return const Center(child: CircularProgressIndicator(color: _orange));
+    if (!_planParsed) return const Center(child: CircularProgressIndicator(color: _lime));
     if (_allDone)     return _buildCongratulations();
 
     return ListView(
@@ -243,7 +245,7 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
               elevation: 0,
             ),
             icon: const Icon(Icons.refresh, color: Colors.white54, size: 18),
-            label: const Text('Generate New Plan', style: TextStyle(fontSize: 14, color: Colors.white54)),
+            label: const Text('Generate New Plan', style: TextStyle(fontSize: 14, color: Colors.white54, fontWeight: FontWeight.w600)),
           ),
         ),
         const SizedBox(height: 30),
@@ -264,22 +266,22 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
     final pct = total == 0 ? 0.0 : done / total;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: _orange.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: _lime.withOpacity(0.2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.auto_awesome, color: _orange, size: 18),
+          const Icon(Icons.auto_awesome, color: _purple, size: 18),
           const SizedBox(width: 8),
-          const Text('Overall Progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          const Text('Overall Progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
           const Spacer(),
-          Text('${(pct * 100).round()}%', style: const TextStyle(color: _orange, fontWeight: FontWeight.w800, fontSize: 18)),
+          Text('${(pct * 100).round()}%', style: const TextStyle(color: _lime, fontWeight: FontWeight.w800, fontSize: 18)),
         ]),
         const SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(value: pct, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation(_orange), minHeight: 8),
+          child: LinearProgressIndicator(value: pct, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation(_lime), minHeight: 8),
         ),
         const SizedBox(height: 8),
-        Text('$done of $total exercises completed', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+        Text('$done of $total exercises completed', style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w500)),
       ]),
     );
   }
@@ -294,7 +296,7 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: _surface, borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isComplete ? _volt.withOpacity(0.5) : Colors.white12, width: isComplete ? 1.5 : 1),
+        border: Border.all(color: isComplete ? _lime.withOpacity(0.5) : Colors.white12, width: isComplete ? 1.5 : 1),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -307,27 +309,27 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
             Container(
               width: 36, height: 36,
               decoration: BoxDecoration(
-                color: isComplete ? _volt.withOpacity(0.15) : _orange.withOpacity(0.15),
+                color: isComplete ? _lime.withOpacity(0.15) : _purple.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(child: isComplete
-                  ? const Icon(Icons.check, color: _volt, size: 18)
-                  : Text('W$weekNum', style: const TextStyle(color: _orange, fontWeight: FontWeight.w800, fontSize: 12))),
+                  ? const Icon(Icons.check, color: _lime, size: 18)
+                  : Text('W$weekNum', style: const TextStyle(color: _purple, fontWeight: FontWeight.w800, fontSize: 12))),
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Week $weekNum', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+              Text('Week $weekNum', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
               const SizedBox(height: 4),
               Row(children: [
                 Expanded(child: ClipRRect(
                   borderRadius: BorderRadius.circular(3),
                   child: LinearProgressIndicator(
                     value: progress, backgroundColor: Colors.white10,
-                    valueColor: AlwaysStoppedAnimation(isComplete ? _volt : _orange), minHeight: 4),
+                    valueColor: AlwaysStoppedAnimation(isComplete ? _lime : _purple), minHeight: 4),
                 )),
                 const SizedBox(width: 8),
                 Text('${(progress * 100).round()}%',
-                    style: TextStyle(color: isComplete ? _volt : _orange, fontWeight: FontWeight.w700, fontSize: 11)),
+                    style: TextStyle(color: isComplete ? _lime : _purple, fontWeight: FontWeight.w700, fontSize: 11)),
               ]),
             ])),
           ]),
@@ -348,7 +350,7 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF111111), borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDone ? _volt.withOpacity(0.3) : Colors.white10),
+        border: Border.all(color: isDone ? _lime.withOpacity(0.3) : Colors.white10),
       ),
       child: isRest
           ? Padding(
@@ -359,14 +361,14 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                   child: const Icon(Icons.self_improvement, color: Colors.white38, size: 18)),
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Day $dayNum — Rest', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13)),
-                  const Text('Recovery & light stretching', style: TextStyle(color: Colors.white24, fontSize: 11)),
+                  Text('Day $dayNum — Rest', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 13)),
+                  const Text('Recovery & light stretching', style: TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w500)),
                 ]),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('REST', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w700)),
+                  decoration: BoxDecoration(color: _purple.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                  child: const Text('REST', style: TextStyle(color: _purple, fontSize: 10, fontWeight: FontWeight.w800)),
                 ),
               ]),
             )
@@ -380,23 +382,23 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                   Container(
                     width: 32, height: 32,
                     decoration: BoxDecoration(
-                      color: isDone ? _volt.withOpacity(0.12) : _orange.withOpacity(0.12),
+                      color: isDone ? _lime.withOpacity(0.12) : _purple.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(child: isDone
-                        ? const Icon(Icons.check, color: _volt, size: 16)
-                        : Text('$dayNum', style: const TextStyle(color: _orange, fontWeight: FontWeight.w800, fontSize: 13))),
+                        ? const Icon(Icons.check, color: _lime, size: 16)
+                        : Text('$dayNum', style: const TextStyle(color: _purple, fontWeight: FontWeight.w800, fontSize: 13))),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(title.length > 30 ? 'Day $dayNum' : title,
-                        style: TextStyle(color: isDone ? Colors.white54 : Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                    Text('${exercises.length} exercises', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        style: TextStyle(color: isDone ? Colors.white54 : Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text('${exercises.length} exercises', style: const TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
                   ])),
                   if (isDone) Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: _volt.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('Done ✓', style: TextStyle(color: _volt, fontSize: 10, fontWeight: FontWeight.w700)),
+                    decoration: BoxDecoration(color: _lime.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('Done ✓', style: TextStyle(color: _lime, fontSize: 10, fontWeight: FontWeight.w800)),
                   ),
                 ]),
                 children: [
@@ -420,9 +422,9 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
       duration: const Duration(milliseconds: 200),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isDone ? _volt.withOpacity(0.07) : Colors.white.withOpacity(0.03),
+        color: isDone ? _lime.withOpacity(0.07) : Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isDone ? _volt.withOpacity(0.3) : Colors.white.withOpacity(0.06)),
+        border: Border.all(color: isDone ? _lime.withOpacity(0.3) : Colors.white.withOpacity(0.06)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -435,8 +437,8 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                 width: 24, height: 24,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isDone ? _volt : Colors.transparent,
-                  border: Border.all(color: isDone ? _volt : Colors.white30, width: 2),
+                  color: isDone ? _lime : Colors.transparent,
+                  border: Border.all(color: isDone ? _lime : Colors.white30, width: 2),
                 ),
                 child: isDone ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
               ),
@@ -450,10 +452,10 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name, style: TextStyle(
                       color: isDone ? Colors.white38 : Colors.white,
-                      fontWeight: FontWeight.w600, fontSize: 13,
+                      fontWeight: FontWeight.w700, fontSize: 13,
                       decoration: isDone ? TextDecoration.lineThrough : null)),
                   if (detail.isNotEmpty)
-                    Text(detail, style: TextStyle(color: isDone ? Colors.white24 : _orange, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text(detail, style: TextStyle(color: isDone ? Colors.white24 : _purple, fontSize: 11, fontWeight: FontWeight.w600)),
                 ]),
               ),
             ),
@@ -472,13 +474,13 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: _volt.withOpacity(0.10), borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _volt.withOpacity(0.35)),
+              color: _lime.withOpacity(0.10), borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _lime.withOpacity(0.35)),
             ),
             child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.videocam_outlined, color: _volt, size: 14),
+              Icon(Icons.videocam_outlined, color: _lime, size: 14),
               SizedBox(width: 6),
-              Text('Try it Live', style: TextStyle(color: _volt, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+              Text('Try it Live', style: TextStyle(color: _lime, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
             ]),
           ),
         ),
@@ -536,29 +538,29 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
       margin: const EdgeInsets.only(top: 4, bottom: 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1200), borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFFCC00).withOpacity(0.35)),
+        color: _coral.withOpacity(0.05), borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _coral.withOpacity(0.35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
             padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(color: const Color(0xFFFFCC00).withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.health_and_safety_outlined, color: Color(0xFFFFCC00), size: 15),
+            decoration: BoxDecoration(color: _coral.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.health_and_safety_outlined, color: _coral, size: 15),
           ),
           const SizedBox(width: 8),
           const Text('Safety for Your Injury',
-              style: TextStyle(color: Color(0xFFFFCC00), fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 0.3)),
+              style: TextStyle(color: _coral, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.3)),
           const Spacer(),
           if (_limitations.isNotEmpty && _limitations.toLowerCase() != 'none')
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFFFFCC00).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: _coral.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
               child: Text(
                 _limitations.split(',').first.trim().length > 18
                     ? '${_limitations.split(',').first.trim().substring(0, 16)}…'
                     : _limitations.split(',').first.trim(),
-                style: const TextStyle(color: Color(0xFFFFCC00), fontSize: 9, fontWeight: FontWeight.w600),
+                style: const TextStyle(color: _coral, fontSize: 9, fontWeight: FontWeight.w700),
               ),
             ),
         ]),
@@ -566,9 +568,9 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
         ...tips.map((tip) => Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Padding(padding: EdgeInsets.only(top: 4), child: Icon(Icons.circle, size: 5, color: Color(0xFFFFCC00))),
+            const Padding(padding: EdgeInsets.only(top: 4), child: Icon(Icons.circle, size: 5, color: _coral)),
             const SizedBox(width: 8),
-            Expanded(child: Text(tip, style: const TextStyle(color: Color(0xFFFFEE88), fontSize: 12, height: 1.5))),
+            Expanded(child: Text(tip, style: TextStyle(color: _coral.withOpacity(0.9), fontSize: 12, height: 1.5))),
           ]),
         )),
       ]),
@@ -608,16 +610,16 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          color: _surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 20),
           Row(children: [
             Container(padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: _orange.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.fitness_center, color: _orange, size: 22)),
+              decoration: BoxDecoration(color: _purple.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.fitness_center, color: _purple, size: 22)),
             const SizedBox(width: 14),
             Expanded(child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800))),
           ]),
@@ -625,18 +627,18 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
           if (detail.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: _orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: _orange.withOpacity(0.3))),
+              decoration: BoxDecoration(color: _purple.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: _purple.withOpacity(0.3))),
               child: Row(children: [
-                const Icon(Icons.repeat, color: _orange, size: 16), const SizedBox(width: 8),
-                Text(detail, style: const TextStyle(color: _orange, fontWeight: FontWeight.w700, fontSize: 14)),
+                const Icon(Icons.repeat, color: _purple, size: 16), const SizedBox(width: 8),
+                Text(detail, style: const TextStyle(color: _purple, fontWeight: FontWeight.w700, fontSize: 14)),
               ]),
             ),
             const SizedBox(height: 16),
           ],
-          const Text('How to perform', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+          const Text('How to perform', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
           const SizedBox(height: 8),
           Text(tips.isNotEmpty ? tips : howTo, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6)),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
         ]),
       ),
     );
@@ -649,21 +651,21 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
         padding: const EdgeInsets.all(32),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Container(width: 100, height: 100,
-            decoration: BoxDecoration(color: _volt.withOpacity(0.15), shape: BoxShape.circle, border: Border.all(color: _volt, width: 2)),
-            child: const Icon(Icons.emoji_events, color: _volt, size: 50)),
+            decoration: BoxDecoration(color: _lime.withOpacity(0.15), shape: BoxShape.circle, border: Border.all(color: _lime, width: 2)),
+            child: const Icon(Icons.emoji_events, color: _lime, size: 50)),
           const SizedBox(height: 28),
           const Text('Congratulations! 🎉', textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
           Text('You\'ve completed your ${_weeks.length}-week plan! Ready for the next challenge?',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 15, height: 1.6)),
+              style: const TextStyle(color: Colors.white54, fontSize: 15, height: 1.6, fontWeight: FontWeight.w500)),
           const SizedBox(height: 40),
           SizedBox(width: double.infinity, height: 54,
             child: ElevatedButton(
               onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
-              style: ElevatedButton.styleFrom(backgroundColor: _orange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 0),
-              child: const Text('Generate Month 2 🚀', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+              style: ElevatedButton.styleFrom(backgroundColor: _lime, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+              child: const Text('Generate Month 2 🚀', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
             ),
           ),
           const SizedBox(height: 14),
@@ -674,7 +676,7 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                   .collection('workout_plans').doc(widget.planId)
                   .set({'progress': {}}, SetOptions(merge: true));
             }),
-            child: const Text('Reset Progress', style: TextStyle(color: Colors.white38, fontSize: 13)),
+            child: const Text('Reset Progress', style: TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ]),
       ),
@@ -691,13 +693,13 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _orange));
+          return const Center(child: CircularProgressIndicator(color: _lime));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(Icons.history, size: 60, color: Colors.white12),
             SizedBox(height: 16),
-            Text('No saved plans yet', style: TextStyle(color: Colors.white38, fontSize: 16)),
+            Text('No saved plans yet', style: TextStyle(color: Colors.white38, fontSize: 16, fontWeight: FontWeight.w600)),
           ]));
         }
 
@@ -713,7 +715,6 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
             final dateStr       = createdAt != null ? _formatDate(createdAt.toDate()) : 'Recently';
 
             return GestureDetector(
-              // ── TAP → open full interactive WorkoutPlanScreen ──
               onTap: () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => WorkoutPlanScreen(
                   plan:   data['plan'] as String? ?? '',
@@ -724,10 +725,10 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isCurrentPlan ? _orange.withOpacity(0.08) : _surface,
-                  borderRadius: BorderRadius.circular(14),
+                  color: isCurrentPlan ? _lime.withOpacity(0.08) : _surface,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isCurrentPlan ? _orange.withOpacity(0.5) : Colors.white12,
+                    color: isCurrentPlan ? _lime.withOpacity(0.5) : Colors.white12,
                     width: isCurrentPlan ? 1.5 : 1,
                   ),
                 ),
@@ -735,28 +736,28 @@ class _WorkoutPlanScreenState extends State<WorkoutPlanScreen>
                   Container(
                     width: 44, height: 44,
                     decoration: BoxDecoration(
-                      color: isCurrentPlan ? _orange.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
+                      color: isCurrentPlan ? _lime.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(child: Text('${index + 1}',
-                        style: TextStyle(color: isCurrentPlan ? _orange : Colors.white54, fontWeight: FontWeight.w800, fontSize: 16))),
+                        style: TextStyle(color: isCurrentPlan ? _lime : Colors.white54, fontWeight: FontWeight.w800, fontSize: 16))),
                   ),
                   const SizedBox(width: 14),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
                       Expanded(child: Text(data['goal'] ?? 'Workout Plan',
-                          style: TextStyle(color: isCurrentPlan ? Colors.white : Colors.white70, fontWeight: FontWeight.w700, fontSize: 14),
+                          style: TextStyle(color: isCurrentPlan ? Colors.white : Colors.white70, fontWeight: FontWeight.w800, fontSize: 15),
                           maxLines: 1, overflow: TextOverflow.ellipsis)),
                       if (isCurrentPlan) Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: _orange.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
-                        child: const Text('Current', style: TextStyle(color: _orange, fontSize: 10, fontWeight: FontWeight.w700)),
+                        decoration: BoxDecoration(color: _lime.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                        child: const Text('Current', style: TextStyle(color: _lime, fontSize: 10, fontWeight: FontWeight.w800)),
                       ),
                     ]),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text('${data['daysPerWeek'] ?? '?'} days · ${data['duration'] ?? '?'} · ${data['fitnessLevel'] ?? '?'}',
-                        style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                    const SizedBox(height: 2),
+                        style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
                     Text(dateStr, style: const TextStyle(color: Colors.white24, fontSize: 11)),
                   ])),
                   const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
