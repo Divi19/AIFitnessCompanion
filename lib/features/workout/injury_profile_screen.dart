@@ -48,7 +48,7 @@ class _InjuryProfileScreenState extends State<InjuryProfileScreen>
   final _clinicalNotesController = TextEditingController();
 
   // ── THEME ─────────────────────────────────────────────────────────────────
-  static const _orange    = Color(0xFFFF5E00);
+  static const _orange    = Color(0xFF9B8FFF);
   static const _voltGreen = Color(0xFFB9FF2B);
   static const _surface   = Color(0xFF1A1A1A);
   static const _bg        = Color(0xFF0D0D0D);

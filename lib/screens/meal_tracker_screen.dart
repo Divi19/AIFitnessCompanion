@@ -275,7 +275,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
   void _showSnack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? const Color(0xFFFF5E00) : const Color(0xFF1A1A1A),
+      backgroundColor: isError ? const Color(0xFFFF7B6B) : const Color(0xFF1A1A2E), // Updated FitSense theme
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 2),
@@ -294,7 +294,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       builder: (_) => Container(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
         decoration: const BoxDecoration(
-          color: Color(0xFF111111),
+          color: Color(0xFF1A1A2E), // Updated Background
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
@@ -337,7 +337,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(
-                  color: Color(0xFFB9FF2B), fontSize: 14, fontWeight: FontWeight.w800)),
+                  color: Color(0xFFC5F135), fontSize: 14, fontWeight: FontWeight.w800)), // Lime
               const SizedBox(height: 3),
               Text(body, style: const TextStyle(
                   color: Colors.white60, fontSize: 13, height: 1.5)),
@@ -359,7 +359,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                        !_isFetchingProduct;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0D0D0D), // Solid Black background
       body: Stack(
         children: [
 
@@ -462,17 +462,17 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: _torchOn
-                      ? const Color(0xFFB9FF2B).withOpacity(0.15)
+                      ? const Color(0xFFC5F135).withOpacity(0.15)
                       : Colors.black45,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: _torchOn
-                        ? const Color(0xFFB9FF2B).withOpacity(0.5)
+                        ? const Color(0xFFC5F135).withOpacity(0.5)
                         : Colors.white12),
                 ),
                 child: Icon(
                   _torchOn ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
-                  color: _torchOn ? const Color(0xFFB9FF2B) : Colors.white,
+                  color: _torchOn ? const Color(0xFFC5F135) : Colors.white,
                   size: 18,
                 ),
               ),
@@ -490,7 +490,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bolt, color: Color(0xFFB9FF2B), size: 16),
+                const Icon(Icons.bolt, color: Color(0xFFC5F135), size: 16),
                 const SizedBox(width: 4),
                 Text(
                   showCamera ? 'Meal Scanner' : _topBarLabel(),
@@ -570,7 +570,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                 width: 220, height: 160,
                 child: CustomPaint(painter: _BracketPainter(
                     color: _showBarcodeBanner
-                        ? const Color(0xFFB9FF2B)
+                        ? const Color(0xFFC5F135)
                         : Colors.white38)),
               ),
               const SizedBox(height: 14),
@@ -612,10 +612,10 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                     width: 76, height: 76,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFFB9FF2B),
+                      color: const Color(0xFFC5F135),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFB9FF2B).withOpacity(0.4),
+                          color: const Color(0xFFC5F135).withOpacity(0.4),
                           blurRadius: 22, spreadRadius: 4,
                         ),
                       ],
@@ -655,7 +655,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
         Text(emoji, style: const TextStyle(fontSize: 40)),
         const SizedBox(height: 14),
         const CircularProgressIndicator(
-            strokeWidth: 2.5, color: Color(0xFFB9FF2B)),
+            strokeWidth: 2.5, color: Color(0xFFC5F135)),
         const SizedBox(height: 12),
         Text(msg, style: const TextStyle(
             color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
@@ -669,7 +669,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       children: [
         Text(emoji, style: const TextStyle(fontSize: 44)),
         const SizedBox(height: 16),
-        const CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFFB9FF2B)),
+        const CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFFC5F135)),
         const SizedBox(height: 12),
         Text(msg, style: const TextStyle(color: Colors.white54, fontSize: 14)),
       ],
@@ -688,7 +688,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                   width: double.infinity, height: 220, fit: BoxFit.cover)),
             ClipRRect(borderRadius: BorderRadius.circular(16),
               child: Container(width: double.infinity, height: 220,
-                  color: Colors.red.withOpacity(0.35))),
+                  color: const Color(0xFFFF7B6B).withOpacity(0.35))), // Coral
             const Positioned.fill(child: Center(child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -705,9 +705,9 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.red.withOpacity(0.08),
+            color: const Color(0xFFFF7B6B).withOpacity(0.08),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.red.withOpacity(0.35)),
+            border: Border.all(color: const Color(0xFFFF7B6B).withOpacity(0.35)),
           ),
           child: Column(children: [
             const Text('We couldn\'t spot any food here.',
@@ -727,7 +727,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFB9FF2B),
+                  backgroundColor: const Color(0xFFC5F135),
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -791,9 +791,9 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFF1A1A2E), // Dark Surface
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFB9FF2B).withOpacity(0.3)),
+            border: Border.all(color: const Color(0xFFC5F135).withOpacity(0.3)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -811,10 +811,10 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
             // Macros row
             Row(children: [
-              _macroCell('${macro('calories').round()} kcal', 'Calories', const Color(0xFFFF5E00)),
-              _macroCell('${macro('protein').toStringAsFixed(1)}g', 'Protein', Colors.blueAccent),
-              _macroCell('${macro('carbs').toStringAsFixed(1)}g', 'Carbs', const Color(0xFFB9FF2B)),
-              _macroCell('${macro('fat').toStringAsFixed(1)}g', 'Fat', Colors.pinkAccent),
+              _macroCell('${macro('calories').round()} kcal', 'Calories', Colors.white), // White for Calories
+              _macroCell('${macro('protein').toStringAsFixed(1)}g', 'Protein', const Color(0xFF9B8FFF)), // Purple for Protein
+              _macroCell('${macro('carbs').toStringAsFixed(1)}g', 'Carbs', const Color(0xFFC5F135)), // Lime for Carbs
+              _macroCell('${macro('fat').toStringAsFixed(1)}g', 'Fat', const Color(0xFFFF7B6B)), // Coral for Fat
             ]),
 
             const SizedBox(height: 20),
@@ -837,7 +837,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
 
             Slider(
               value: _portionFactor, min: 0.1, max: 1.0, divisions: 9,
-              activeColor: const Color(0xFFB9FF2B),
+              activeColor: const Color(0xFFC5F135),
               inactiveColor: Colors.white12,
               onChanged: (v) => setState(() => _portionFactor = v),
             ),
@@ -852,7 +852,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
           Expanded(child: ElevatedButton(
             onPressed: _confirmSnack,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFB9FF2B), foregroundColor: Colors.black,
+              backgroundColor: const Color(0xFFC5F135), foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -888,7 +888,7 @@ class _MealTrackerScreenState extends State<MealTrackerScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: sel ? const Color(0xFFB9FF2B) : Colors.white10,
+          color: sel ? const Color(0xFFC5F135) : Colors.white10,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(label, textAlign: TextAlign.center,
@@ -923,13 +923,13 @@ class _BarcodeBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: const Color(0xFF1A1A2E), // Dark Surface
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-              color: const Color(0xFFB9FF2B).withOpacity(0.6), width: 1.5),
+              color: const Color(0xFFC5F135).withOpacity(0.6), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFB9FF2B).withOpacity(0.12),
+              color: const Color(0xFFC5F135).withOpacity(0.12),
               blurRadius: 20, spreadRadius: 2,
             ),
           ],
@@ -938,16 +938,16 @@ class _BarcodeBanner extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFB9FF2B).withOpacity(0.12),
+              color: const Color(0xFFC5F135).withOpacity(0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.qr_code_scanner_rounded,
-                color: Color(0xFFB9FF2B), size: 20),
+                color: Color(0xFFC5F135), size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Barcode detected!',
-                style: TextStyle(color: Color(0xFFB9FF2B),
+                style: TextStyle(color: Color(0xFFC5F135),
                     fontSize: 12, fontWeight: FontWeight.w800)),
             Text(barcode,
                 style: TextStyle(color: Colors.white.withOpacity(0.45),
@@ -964,7 +964,7 @@ class _BarcodeBanner extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFB9FF2B),
+                color: const Color(0xFFC5F135),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text('Look up',
@@ -1093,7 +1093,7 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
     return v > 1.0 ? v / 100.0 : v;
   }
 
-  Color  get _confColor => _confidence >= 0.75 ? const Color(0xFFB9FF2B) : _confidence >= 0.45 ? Colors.orangeAccent : Colors.redAccent;
+  Color  get _confColor => _confidence >= 0.75 ? const Color(0xFFC5F135) : _confidence >= 0.45 ? const Color(0xFFFF7B6B) : const Color(0xFFFF7B6B);
   String get _confLabel => _confidence >= 0.75 ? 'High match' : _confidence >= 0.45 ? 'Possible' : 'Low confidence';
   bool   get _isUSDA    => widget.suggestion['source'] == 'USDA';
 
@@ -1111,7 +1111,7 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: const Color(0xFF1A1A2E), // Dark Surface
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _confColor.withOpacity(0.35)),
       ),
@@ -1132,16 +1132,16 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: _isUSDA
-                      ? Colors.blueAccent.withOpacity(0.15)
-                      : Colors.orangeAccent.withOpacity(0.15),
+                      ? const Color(0xFF9B8FFF).withOpacity(0.15)
+                      : const Color(0xFFFF7B6B).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: _isUSDA
-                      ? Colors.blueAccent.withOpacity(0.5)
-                      : Colors.orangeAccent.withOpacity(0.5)),
+                      ? const Color(0xFF9B8FFF).withOpacity(0.5)
+                      : const Color(0xFFFF7B6B).withOpacity(0.5)),
                 ),
                 child: Text(_isUSDA ? '📊 USDA' : '🤖 AI estimate',
                     style: TextStyle(
-                      color: _isUSDA ? Colors.blueAccent : Colors.orangeAccent,
+                      color: _isUSDA ? const Color(0xFF9B8FFF) : const Color(0xFFFF7B6B),
                       fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ]),
@@ -1201,7 +1201,7 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(
-                            color: Color(0xFFB9FF2B), width: 1.5)),
+                            color: Color(0xFFC5F135), width: 1.5)),
                   ),
                   onChanged: _updateGrams,
                 ),
@@ -1221,7 +1221,7 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: sel ? const Color(0xFFB9FF2B) : Colors.grey[800],
+                        color: sel ? const Color(0xFFC5F135) : Colors.grey[800],
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text('${g}g', style: TextStyle(
@@ -1244,13 +1244,13 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
           decoration: BoxDecoration(
               color: Colors.black26, borderRadius: BorderRadius.circular(12)),
           child: Row(children: [
-            _nutriCell('${_cal.round()} kcal', 'Calories', const Color(0xFFFF5E00)),
+            _nutriCell('${_cal.round()} kcal', 'Calories', Colors.white), // Calories White
             _vDiv(),
-            _nutriCell('${_prot}g', 'Protein', Colors.blueAccent),
+            _nutriCell('${_prot}g', 'Protein', const Color(0xFF9B8FFF)), // Protein Purple
             _vDiv(),
-            _nutriCell('${_carb}g', 'Carbs', const Color(0xFFB9FF2B)),
+            _nutriCell('${_carb}g', 'Carbs', const Color(0xFFC5F135)), // Carbs Lime
             _vDiv(),
-            _nutriCell('${_fat}g', 'Fat', Colors.pinkAccent),
+            _nutriCell('${_fat}g', 'Fat', const Color(0xFFFF7B6B)), // Fat Coral
           ]),
         ),
 
@@ -1261,7 +1261,7 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
             child: ElevatedButton(
               onPressed: () => widget.onConfirm(_grams),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB9FF2B),
+                backgroundColor: const Color(0xFFC5F135),
                 foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -1285,5 +1285,5 @@ class _MealSuggestionCardState extends State<_MealSuggestionCard> {
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
       ]));
 
-  Widget _vDiv() => Container(width: 1, height: 28, color: Colors.white12);
+  Widget _vDiv() => Container(width: 1, height: 28, color: Colors.white12); 
 }
